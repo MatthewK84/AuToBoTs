@@ -24,3 +24,5 @@ This repository bounds flight and commit. It does not assure a tactical decision
 ## Status
 
 Task list only. Implementation starts at M0.1.
+
+Expanded scope is in `docs/engineering-tasks-m11.md`: control-barrier filter (M11), untrusted shadow network (M12), signed spec reload (M13), commit authority (M14), GStreamer tracker (M15), DO-178C evidence package (M16). Recovery the switch trusts remains the flight controller. Arming circuits, fuzes, and release actuators stay out of this repository.
