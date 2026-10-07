@@ -2,7 +2,7 @@
 
 Fail-closed runtime assurance for a Group 1–3 aircraft. The flight controller owns actuators and recovery. A Rust host owns I/O and the switch. An RTLola specification owns every predicate.
 
-This is not an authorizing-official package, not a control-barrier filter, and not a claim that the tactical decision is correct. It bounds flight and commit.
+M0–M10 bound flight and commit. Control-barrier filtering, a second untrusted network, spec reload, commit authority, the video tracker, and the DO-178C evidence package are M11–M16 in docs/engineering-tasks-m11.md. Those milestones do not replace the fail-closed switch.
 
 Each `###` heading is one GitHub issue. Do the milestones in order. M3 and M4 can run in parallel after M2. M10 can start once M5 exists.
 
@@ -722,11 +722,15 @@ Acceptance:
 
 ---
 
-## Out of scope
+## Moved to M11–M16
 
-- Control-barrier or safety-filter synthesis.
-- A second neural net as the backup controller.
-- On-aircraft learning or spec hot reload.
-- Weapons-release authority beyond the inhibit conjunction.
-- DO-178C or an authorizing-official package.
-- Video decode, tracker implementation, GStreamer.
+The following are in scope in docs/engineering-tasks-m11.md, under the public documents named there. They are not part of M0–M10.
+
+- Control-barrier / safety-filter synthesis. M11.
+- A second neural net as an untrusted backup proposal. M12. It is not the recovery controller.
+- On-aircraft learning or spec hot reload, behind a signed bundle and a fixture quarantine. M13.
+- Commit authority beyond the inhibit conjunction. M14. Software authority only.
+- DO-178C evidence and an authorizing-official packet skeleton. M16. Not a certification claim.
+- Video decode, tracker implementation, GStreamer. M15.
+
+Still out of scope: arming circuits, fuzes, safe-and-arm devices, release actuators, and a signature block this repository fills in.
