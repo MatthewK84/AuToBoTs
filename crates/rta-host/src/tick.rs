@@ -34,16 +34,23 @@ impl TickState {
         self.interpreter_fault
     }
 
-    pub fn tick(&mut self, monitor: &mut impl Eval, deadline: Duration) -> Verdict {
+    pub fn tick(&mut self, monitor: &mut impl Eval, deadline: Duration) -> TimedTick {
         if self.interpreter_fault {
-            return Verdict::Revert;
+            return TimedTick {
+                verdict: Verdict::Revert,
+                duration: Duration::ZERO,
+            };
         }
         let started = Instant::now();
         let result = monitor.accept();
-        if started.elapsed() > deadline {
-            return Verdict::Revert;
+        let duration = started.elapsed();
+        if duration > deadline {
+            return TimedTick {
+                verdict: Verdict::Revert,
+                duration,
+            };
         }
-        match result {
+        let verdict = match result {
             Err(()) => {
                 self.interpreter_fault = true;
                 Verdict::Revert
@@ -51,8 +58,15 @@ impl TickState {
             Ok(outputs) if outputs.revert => Verdict::Revert,
             Ok(outputs) if outputs.inhibit => Verdict::Inhibit,
             Ok(_) => Verdict::Pass,
-        }
+        };
+        TimedTick { verdict, duration }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimedTick {
+    pub verdict: Verdict,
+    pub duration: Duration,
 }
 
 #[cfg(test)]
@@ -87,11 +101,21 @@ mod tests {
     }
 
     #[test]
+    fn fast_pass_stays_pass() {
+        let mut state = TickState::default();
+        let mut monitor = Idle;
+        let timed = state.tick(&mut monitor, Duration::from_millis(50));
+        assert_eq!(timed.verdict, Verdict::Pass);
+        assert!(timed.duration < Duration::from_millis(50));
+    }
+
+    #[test]
     fn late_pass_is_revert() {
         let mut state = TickState::default();
         let mut monitor = Slow { calls: 0 };
-        let verdict = state.tick(&mut monitor, Duration::from_millis(5));
-        assert_eq!(verdict, Verdict::Revert);
+        let timed = state.tick(&mut monitor, Duration::from_millis(5));
+        assert_eq!(timed.verdict, Verdict::Revert);
+        assert!(timed.duration > Duration::from_millis(5));
         assert_eq!(monitor.calls, 1);
     }
 
@@ -100,11 +124,11 @@ mod tests {
         let mut state = TickState::default();
         let mut monitor = Fault { calls: 0 };
         assert_eq!(
-            state.tick(&mut monitor, Duration::from_millis(50)),
+            state.tick(&mut monitor, Duration::from_millis(50)).verdict,
             Verdict::Revert
         );
         assert_eq!(
-            state.tick(&mut monitor, Duration::from_millis(50)),
+            state.tick(&mut monitor, Duration::from_millis(50)).verdict,
             Verdict::Revert
         );
         assert_eq!(monitor.calls, 1);

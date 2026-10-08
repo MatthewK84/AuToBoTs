@@ -74,7 +74,7 @@ fn main() -> ExitCode {
     let _event = event::event(&record);
     let _order = event::spec_input_order(&spec_text);
     let mut ticks = tick::TickState::default();
-    let _verdict = ticks.tick(
+    let _timed = ticks.tick(
         &mut tick::Idle,
         std::time::Duration::from_millis(config.tick.deadline_ms),
     );
