@@ -15,6 +15,8 @@ mod read;
 mod spec;
 mod stale;
 mod tick;
+mod tracker;
+use crate::tracker::Tracker;
 mod watchdog;
 
 use std::env;
@@ -160,6 +162,8 @@ fn main() -> ExitCode {
         let _fix_age = mavlink_link::age_ms(vehicle.fix_received_ms, 0);
         let _age = mav.fc_heartbeat_age_ms(0);
     }
+    let mut tracker = tracker::FakeTracker::script(vec![tracker::weak_inside_commit(0)]);
+    let _track = tracker.sample();
     println!("rta-host: config accepted, stub bind {bound:?}");
     ExitCode::SUCCESS
 }
