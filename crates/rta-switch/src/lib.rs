@@ -34,6 +34,19 @@ pub enum SwitchCommand {
     },
 }
 
+pub trait Complex {
+    fn request(&mut self) -> Option<Request>;
+}
+
+#[derive(Debug, Default)]
+pub struct StubComplex;
+
+impl Complex for StubComplex {
+    fn request(&mut self) -> Option<Request> {
+        None
+    }
+}
+
 pub fn decide(
     verdict: Verdict,
     request: Option<Request>,
@@ -193,6 +206,17 @@ mod tests {
             } => {}
             SwitchCommand::Mode { .. } => panic!("revert changed the configured mode"),
             SwitchCommand::Setpoints { .. } => panic!("revert returned setpoints"),
+        }
+    }
+
+    #[test]
+    fn stub_request_never_appears_in_revert() {
+        let mut stub = StubComplex;
+        let request = stub.request();
+        assert!(request.is_none());
+        match decide(Verdict::Revert, request, rta_spec::RecoveryMode::Rtl) {
+            SwitchCommand::Mode { .. } => {}
+            SwitchCommand::Setpoints { .. } => panic!("stub request appeared in revert"),
         }
     }
 
