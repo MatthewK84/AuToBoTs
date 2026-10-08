@@ -17,3 +17,4 @@ rtlola-frontend = "=0.8.0"
 mavlink = { version = "=0.18.0", default-features = false, features = ["std", "serde", "dialect-common"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+ordered-float = "=3.9.2"

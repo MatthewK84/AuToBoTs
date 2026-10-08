@@ -929,6 +929,7 @@ name = "rta-host"
 version = "0.1.0"
 dependencies = [
  "mavlink",
+ "ordered-float",
  "rta-spec",
  "rta-switch",
  "rtlola-frontend",
