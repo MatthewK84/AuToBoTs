@@ -40,4 +40,44 @@ mod tests {
     fn broken_spec_fails_parse() {
         assert!(load_spec("this is not a spec").is_err());
     }
+
+    #[test]
+    fn first_monitor_has_named_streams() {
+        let text = include_str!("../../../spec/monitor.lola");
+        load_spec(text).expect("monitor");
+        for name in [
+            "fix_stale",
+            "link_stale",
+            "heartbeat_stale",
+            "weak_track",
+            "inside_commit",
+            "revert",
+            "inhibit",
+        ] {
+            assert!(text.contains(name), "{name}");
+        }
+        for code in [
+            "\"fence\"",
+            "\"fix\"",
+            "\"link\"",
+            "\"heartbeat\"",
+            "\"weak_track\"",
+        ] {
+            assert!(text.contains(code), "{code}");
+        }
+    }
+
+    #[test]
+    fn host_has_no_threshold_literals() {
+        let host = [
+            include_str!("main.rs"),
+            include_str!("config.rs"),
+            include_str!("fence.rs"),
+            include_str!("stale.rs"),
+        ]
+        .concat();
+        for literal in ["500.0", "300.0", "1000.0", "0.40", "150.0"] {
+            assert!(!host.contains(literal), "{literal}");
+        }
+    }
 }

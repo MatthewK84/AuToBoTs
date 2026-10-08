@@ -1,0 +1,8 @@
+[
+  {"name": "fence", "fence_ok": false, "fix_age_ms": 0, "link_age_ms": 0, "fc_heartbeat_age_ms": 0, "track_conf": 1.0, "range_m": 10, "verdict": "Revert", "reason": "fence"},
+  {"name": "fix", "fence_ok": true, "fix_age_ms": 501, "link_age_ms": 0, "fc_heartbeat_age_ms": 0, "track_conf": 1.0, "range_m": 10, "verdict": "Revert", "reason": "fix"},
+  {"name": "link", "fence_ok": true, "fix_age_ms": 0, "link_age_ms": 301, "fc_heartbeat_age_ms": 0, "track_conf": 1.0, "range_m": 10, "verdict": "Revert", "reason": "link"},
+  {"name": "heartbeat", "fence_ok": true, "fix_age_ms": 0, "link_age_ms": 0, "fc_heartbeat_age_ms": 1001, "track_conf": 1.0, "range_m": 10, "verdict": "Revert", "reason": "heartbeat"},
+  {"name": "weak_track", "fence_ok": true, "fix_age_ms": 0, "link_age_ms": 0, "fc_heartbeat_age_ms": 0, "track_conf": 0.39, "range_m": 149, "verdict": "Inhibit", "reason": "weak_track"},
+  {"name": "pass", "fence_ok": true, "fix_age_ms": 0, "link_age_ms": 0, "fc_heartbeat_age_ms": 0, "track_conf": 0.40, "range_m": 150, "verdict": "Pass", "reason": "none"}
+]

@@ -41,7 +41,7 @@ fn main() -> ExitCode {
                     vertical_cap_m: *vertical_cap_m,
                     v_max: *v_max,
                     a_max: *a_max,
-                    mode_change_latency_s: config.tick.mode_change_latency_ms as f64 / 1000.0,
+                    mode_change_latency_s: config.tick.mode_change_latency_ms as f64 / 1_000.0,
                 },
             ) || polygon.is_empty()
         }
