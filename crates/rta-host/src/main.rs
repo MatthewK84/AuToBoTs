@@ -3,6 +3,7 @@
 
 mod config;
 mod fence;
+mod monitor;
 mod spec;
 mod stale;
 
@@ -47,12 +48,20 @@ fn main() -> ExitCode {
         }
         config::Fence::Fc => false,
     };
-    if let Err(err) =
-        spec::load_spec(&std::fs::read_to_string(&config.spec.path).unwrap_or_default())
-    {
+    let spec_text = std::fs::read_to_string(&config.spec.path).unwrap_or_default();
+    if let Err(err) = spec::load_spec(&spec_text) {
         eprintln!("spec: {err}");
         return ExitCode::from(1);
     }
+    let built = match monitor::build_once(&spec_text) {
+        Ok(built) => built,
+        Err(err) => {
+            eprintln!("spec: {err:?}");
+            return ExitCode::from(1);
+        }
+    };
+    let _monitor = built.borrow_monitor();
+    let _builds = monitor::build_count();
     println!("rta-host: config accepted, no link opened");
     ExitCode::SUCCESS
 }
