@@ -3,6 +3,7 @@
 
 mod config;
 mod fence;
+mod spec;
 mod stale;
 
 use std::env;
@@ -46,6 +47,12 @@ fn main() -> ExitCode {
         }
         config::Fence::Fc => false,
     };
+    if let Err(err) =
+        spec::load_spec(&std::fs::read_to_string(&config.spec.path).unwrap_or_default())
+    {
+        eprintln!("spec: {err}");
+        return ExitCode::from(1);
+    }
     println!("rta-host: config accepted, no link opened");
     ExitCode::SUCCESS
 }

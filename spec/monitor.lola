@@ -1,0 +1,4 @@
+input fence_ok: Bool
+
+output revert: Bool := !fence_ok
+output inhibit: Bool := revert
