@@ -35,3 +35,24 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
+
+  close-named-issue:
+    needs: [compile, deny, evidence]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Close the issue named in the commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          msg=$(git log -1 --format=%B)
+          num=$(printf '%s\n' "$msg" | sed -n 's/.*Issue: #\?\([0-9][0-9]*\).*/\1/p' | head -n 1)
+          if [ -z "$num" ]; then
+            echo "no Issue: line; nothing to close"
+            exit 0
+          fi
+          gh issue close "$num" --repo "$GITHUB_REPOSITORY" --reason completed --comment "Closed after CI passed on ${GITHUB_SHA}."

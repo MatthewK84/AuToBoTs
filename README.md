@@ -156,6 +156,8 @@ cargo deny check
 
 `scripts/wait-ci.sh` blocks until the push run for this commit finishes. It exits non-zero if CI fails.
 
+`scripts/close-issue.sh 24` runs that wait, then closes the issue. A commit that contains `Issue: 24` is closed by CI after compile, deny, and evidence pass. A commit with no issue line closes nothing.
+
 
 The example config is `config/example.toml`. A missing or invalid file exits before a socket. The predicate source is `spec/monitor.lola`.
 
