@@ -1,6 +1,7 @@
 //! Host binary. Forbidden: a direct MAVLink write that skips `rta-switch::decide`.
 //! Config load failure exits before a socket type is constructed.
 
+mod command_out;
 mod config;
 mod eval;
 mod event;
@@ -164,6 +165,9 @@ fn main() -> ExitCode {
     }
     let mut tracker = tracker::FakeTracker::script(vec![tracker::weak_inside_commit(0)]);
     let _track = tracker.sample();
+    let _outbound =
+        command_out::to_message(&rta_switch::SwitchCommand::Idle, config.link.system_id);
+    let _reported = command_out::reported_mode(0);
     println!("rta-host: config accepted, stub bind {bound:?}");
     ExitCode::SUCCESS
 }

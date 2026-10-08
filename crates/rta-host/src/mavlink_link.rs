@@ -131,7 +131,10 @@ pub fn classify(message: &MavMessage) -> Inbound {
 }
 
 #[cfg(test)]
-fn recv_frame(socket: &std::net::UdpSocket, wait: std::time::Duration) -> Result<Vec<u8>, String> {
+pub(crate) fn recv_frame(
+    socket: &std::net::UdpSocket,
+    wait: std::time::Duration,
+) -> Result<Vec<u8>, String> {
     socket
         .set_read_timeout(Some(wait))
         .map_err(|err| err.to_string())?;

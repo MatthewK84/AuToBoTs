@@ -20,3 +20,9 @@ Message ids for the common dialect:
 - `SYS_STATUS` is 1. It is logged in v1. It is not a predicate. The adapter does not read battery or estimator fields from it.
 
 `link_age_ms` is the age of the companion socket. A position or a heartbeat counts. A status text does not. It is separate from `fc_heartbeat_age_ms` because the two fail differently.
+
+Outbound commands:
+
+- `SwitchCommand::Mode` is `COMMAND_LONG` with `MAV_CMD_DO_SET_MODE`, message id 76. `SET_MODE` is superseded. The bench custom mode is 6 for rtl, 5 for loiter, and 4 for land.
+- `SwitchCommand::Setpoints` is `SET_POSITION_TARGET_LOCAL_NED`, message id 84.
+- `SwitchCommand::Idle` sends nothing. A second revert tick sends nothing when the reported custom mode already matches recovery.
