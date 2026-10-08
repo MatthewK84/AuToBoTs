@@ -151,6 +151,13 @@ fn main() -> ExitCode {
     {
         let _beat = mav.send_heartbeat();
         mav.note(&mavlink_link::classify(&mavlink_link::heartbeat()), 0);
+        let mut vehicle = mavlink_link::VehicleState::default();
+        mavlink_link::apply(
+            &mut vehicle,
+            &mavlink_link::Inbound::Position { alt_mm: 0 },
+            0,
+        );
+        let _fix_age = mavlink_link::age_ms(vehicle.fix_received_ms, 0);
         let _age = mav.fc_heartbeat_age_ms(0);
     }
     println!("rta-host: config accepted, stub bind {bound:?}");
