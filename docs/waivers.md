@@ -8,3 +8,4 @@ Each waiver names the check, the reason, and the condition that removes it. No s
 | RUSTSEC-2026-0194 | Same blocked upgrade. Consumer is the bindgen build script, not the flight binary. | Same |
 | priority-queue LGPL-3.0 OR MPL-2.0 | Transitive from `rtlola-interpreter` 0.11.0. Copyleft stays denied everywhere else. | The interpreter drops this crate |
 | Unicode-3.0 | OSI license on `unicode-ident`, pulled by `proc-macro2`. Not copyleft. | Not a waiver. Allowed. |
+| serialport MPL-2.0 | Required by the MAVLink serial transport. File-level copyleft, crate-specific. | A UDP-only link is the chosen bench |
