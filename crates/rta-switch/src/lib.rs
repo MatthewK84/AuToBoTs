@@ -11,7 +11,59 @@ pub enum Command {
     Recovery,
 }
 
-pub fn decide(input: &TickInput) -> (Command, TickLog) {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Request {
+    pub north: f64,
+    pub east: f64,
+    pub down: f64,
+    pub yaw: f64,
+    pub commit: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SwitchCommand {
+    Setpoints {
+        north: f64,
+        east: f64,
+        down: f64,
+        yaw: f64,
+        commit: bool,
+    },
+    Mode {
+        recovery: rta_spec::RecoveryMode,
+    },
+}
+
+pub fn decide(
+    verdict: Verdict,
+    request: Option<Request>,
+    recovery: rta_spec::RecoveryMode,
+) -> SwitchCommand {
+    match verdict {
+        Verdict::Revert => SwitchCommand::Mode { recovery },
+        Verdict::Inhibit => setpoints(request, false),
+        Verdict::Pass => setpoints(request, request.is_some_and(|item| item.commit)),
+    }
+}
+
+fn setpoints(request: Option<Request>, commit: bool) -> SwitchCommand {
+    let request = request.unwrap_or(Request {
+        north: 0.0,
+        east: 0.0,
+        down: 0.0,
+        yaw: 0.0,
+        commit: false,
+    });
+    SwitchCommand::Setpoints {
+        north: request.north,
+        east: request.east,
+        down: request.down,
+        yaw: request.yaw,
+        commit,
+    }
+}
+
+pub fn decide_input(input: &TickInput) -> (Command, TickLog) {
     if input.pilot_override {
         return inhibit(Reason::PilotOverride);
     }
@@ -90,10 +142,55 @@ mod tests {
     }
 
     #[test]
+    fn six_verdict_rows() {
+        let recovery = rta_spec::RecoveryMode::Rtl;
+        let pending = Request {
+            north: 1.0,
+            east: 2.0,
+            down: 3.0,
+            yaw: 4.0,
+            commit: true,
+        };
+        let rows = [
+            (Verdict::Revert, Some(pending), true),
+            (Verdict::Revert, None, true),
+            (Verdict::Inhibit, Some(pending), false),
+            (Verdict::Inhibit, None, false),
+            (Verdict::Pass, Some(pending), false),
+            (Verdict::Pass, None, false),
+        ];
+        for (verdict, request, mode) in rows {
+            let command = decide(verdict, request, recovery);
+            assert_eq!(matches!(command, SwitchCommand::Mode { .. }), mode);
+            if let SwitchCommand::Setpoints { commit, .. } = command {
+                assert!(!commit || verdict == Verdict::Pass);
+            }
+        }
+        match decide(Verdict::Pass, Some(pending), recovery) {
+            SwitchCommand::Setpoints {
+                commit: true,
+                north: 1.0,
+                ..
+            } => {}
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn switch_has_no_socket_or_interpreter() {
+        let source = include_str!("lib.rs");
+        let manifest = include_str!("../Cargo.toml");
+        let socket = ["use std", "::net"].concat();
+        assert!(!source.contains(&socket));
+        assert!(!manifest.contains("rtlola"));
+        assert!(!manifest.contains("mavlink"));
+    }
+
+    #[test]
     fn missing_grant_does_not_commit() {
         let mut input = ok();
         input.grant_present = false;
-        let (command, log) = decide(&input);
+        let (command, log) = decide_input(&input);
         assert_ne!(command, Command::Commit);
         assert_eq!(log.verdict, Verdict::Inhibit);
         assert_eq!(log.reason, Reason::NoGrant);
@@ -103,7 +200,7 @@ mod tests {
     fn coast_failure_does_not_commit() {
         let mut input = ok();
         input.coast_ok = false;
-        let (command, log) = decide(&input);
+        let (command, log) = decide_input(&input);
         assert_ne!(command, Command::Commit);
         assert_eq!(log.reason, Reason::Coast);
     }
@@ -112,7 +209,7 @@ mod tests {
     fn pilot_override_does_not_commit() {
         let mut input = ok();
         input.pilot_override = true;
-        let (command, _) = decide(&input);
+        let (command, _) = decide_input(&input);
         assert_ne!(command, Command::Commit);
     }
 
@@ -120,7 +217,7 @@ mod tests {
     fn inhibit_does_not_keep_commit() {
         let mut input = ok();
         input.grant_present = false;
-        let (command, log) = decide(&input);
+        let (command, log) = decide_input(&input);
         assert_eq!(log.verdict, Verdict::Inhibit);
         assert_ne!(command, Command::Commit);
     }
@@ -129,7 +226,7 @@ mod tests {
     fn abort_does_not_commit() {
         let mut input = ok();
         input.abort_requested = true;
-        let (command, log) = decide(&input);
+        let (command, log) = decide_input(&input);
         assert_eq!(command, Command::Abort);
         assert_ne!(command, Command::Commit);
         assert_eq!(log.reason, Reason::Abort);
