@@ -7,6 +7,7 @@ mod fence;
 mod monitor;
 mod spec;
 mod stale;
+mod tick;
 
 use std::env;
 use std::process::ExitCode;
@@ -67,6 +68,12 @@ fn main() -> ExitCode {
         rta_spec::InputRecord::try_new(0.0, false, 0.0, 0.0, 0.0, 0.0, 0.0).expect("record");
     let _event = event::event(&record);
     let _order = event::spec_input_order(&spec_text);
+    let mut ticks = tick::TickState::default();
+    let _verdict = ticks.tick(
+        &mut tick::Idle,
+        std::time::Duration::from_millis(config.tick.deadline_ms),
+    );
+    let _faulted = ticks.faulted();
     println!("rta-host: config accepted, no link opened");
     ExitCode::SUCCESS
 }
