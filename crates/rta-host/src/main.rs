@@ -4,6 +4,7 @@
 mod config;
 mod eval;
 mod event;
+mod fail_closed;
 mod fence;
 mod link;
 mod link_age;
@@ -123,6 +124,16 @@ fn main() -> ExitCode {
     let _faulted = evaluator.faulted();
     let mut complex: Box<dyn rta_switch::Complex> = Box::new(rta_switch::StubComplex);
     let _request = complex.request();
+    let mut closed = fail_closed::FailClosed::default();
+    let _closed = closed.command(fail_closed::TickCase {
+        verdict: None,
+        late: false,
+        heartbeat_age_ms: None,
+        request: None,
+        reported: rta_spec::RecoveryMode::Loiter,
+        recovery,
+        write_ok: true,
+    });
     println!("rta-host: config accepted, stub bind {bound:?}");
     ExitCode::SUCCESS
 }
