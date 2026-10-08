@@ -69,7 +69,9 @@ mod tests {
     #[test]
     fn watchdog_does_not_name_the_interpreter() {
         let source = include_str!("watchdog.rs");
-        assert!(!source.contains("rtlola"));
-        assert!(!source.contains("Monitor"));
+        let interpreter = ["rt", "lola"].concat();
+        let monitor = ["Mon", "itor"].concat();
+        assert!(!source.contains(&interpreter));
+        assert!(!source.contains(&monitor));
     }
 }
