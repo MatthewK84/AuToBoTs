@@ -15,6 +15,34 @@ Frozen decisions, do not relitigate in a task:
 - The complex function cannot reach the MAVLink socket. It submits a request. The switch disposes of it.
 - `Revert` beats `Inhibit` beats `Pass`.
 
+
+## M20–M39
+
+These twenty milestones are part of this file. Task text is under the matching heading below. Issues #59–#78.
+
+| Milestone | Issue | Task |
+| --- | --- | --- |
+| M20 Requirement baseline | #59 | Shall statements, each with a hazard and a verification method |
+| M21 System safety method | #60 | Severity and probability before and after the monitor |
+| M22 Flight-controller interface control | #61 | Message contract, including companion-death failsafe |
+| M23 Time base | #62 | Monotonic clock; a wall-clock step must not shrink ages |
+| M24 Reproducible build | #63 | Lockfile, toolchain, and runner image in the configuration index |
+| M25 Static analysis | #64 | Unwrap and expect banned on the switch path |
+| M26 Structural coverage | #65 | Branch coverage gated on `decide` |
+| M27 Common-mode failures | #66 | Shared position estimate named, not claimed diverse |
+| M28 Watchdog independence | #67 | Watchdog does not call the interpreter, filter, or tracker |
+| M29 Parameter data | #68 | Config hash treated as its own configuration item |
+| M30 Startup and shutdown | #69 | Config, spec, log, then socket; recovery before exit |
+| M31 Degraded-mode matrix | #70 | No degraded row allows commit |
+| M32 Log schema version | #71 | Unknown log version is rejected, not guessed |
+| M33 Operator latency budget | #72 | Withdraw inhibits the next tick, not the command already sent |
+| M34 Simulation claims | #73 | What SITL shows and what it does not |
+| M35 Tracker adversarial cases | #74 | Frozen frame, empty frame, NaN confidence, two tracks |
+| M36 Spec change gate | #75 | Spec edit without notes fails CI |
+| M37 Release checklist | #76 | Ground release tag refuses a dirty index |
+| M38 Data rights and third-party code | #77 | License list matches `cargo deny` |
+| M39 Residual risk note | #78 | What is not closed, and who would have to accept it |
+
 ---
 
 ## M0 — Repository and toolchain
