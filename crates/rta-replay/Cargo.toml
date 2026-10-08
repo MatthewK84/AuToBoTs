@@ -10,4 +10,4 @@ name = "rta-replay"
 path = "src/main.rs"
 
 [dependencies]
-rta-spec = { path = "../rta-spec" }
+rta-spec = { path = "../rta-spec", version = "0.1.0" }

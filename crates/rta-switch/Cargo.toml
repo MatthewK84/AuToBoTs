@@ -6,7 +6,7 @@ description = "Fail-closed command decision. No interpreter, no MAVLink, no rele
 license = "Apache-2.0"
 
 [dependencies]
-rta-spec = { path = "../rta-spec" }
+rta-spec = { path = "../rta-spec", version = "0.1.0" }
 
 [features]
 default = []

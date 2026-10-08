@@ -1,8 +1,16 @@
 [advisories]
 yanked = "deny"
+ignore = [
+  { id = "RUSTSEC-2026-0195", reason = "mavlink-bindgen 0.18 uses Reader, not NsReader. The advisory says a plain Reader is not affected. quick-xml 0.41 cannot be selected because mavlink-bindgen requires ^0.39." },
+  { id = "RUSTSEC-2026-0194", reason = "Same blocked upgrade. The only consumer is the mavlink-bindgen build script, not the flight binary. Remove this ignore when mavlink-bindgen accepts quick-xml >= 0.41." },
+]
+
 [licenses]
-allow = ["MIT", "Apache-2.0", "BSD-3-Clause"]
-confidence-threshold = 0.8
+allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "Unicode-3.0"]
+exceptions = [
+  { allow = ["LGPL-3.0", "MPL-2.0"], crate = "priority-queue" },
+]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
