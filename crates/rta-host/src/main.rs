@@ -4,6 +4,7 @@
 mod config;
 mod event;
 mod fence;
+mod link;
 mod mode;
 mod monitor;
 mod spec;
@@ -83,6 +84,25 @@ fn main() -> ExitCode {
         config::RecoveryMode::Land => rta_spec::RecoveryMode::Land,
     };
     let _mode = modes.send(rta_spec::Verdict::Pass, None, recovery, &mut sink);
-    println!("rta-host: config accepted, no link opened");
+    let endpoint = match link::parse_endpoint(&config.link.endpoint) {
+        Ok(endpoint) => endpoint,
+        Err(err) => {
+            eprintln!("link: {err:?}");
+            return ExitCode::from(1);
+        }
+    };
+    let mut bound = None;
+    if let Err(err) = link::open(
+        &endpoint,
+        config.link.system_id,
+        config.link.component_id,
+        &mut |address, _system, _component| {
+            bound = Some(address.to_string());
+        },
+    ) {
+        eprintln!("link: {err:?}");
+        return ExitCode::from(1);
+    }
+    println!("rta-host: config accepted, stub bind {bound:?}");
     ExitCode::SUCCESS
 }
