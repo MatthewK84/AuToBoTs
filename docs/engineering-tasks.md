@@ -1122,7 +1122,349 @@ Acceptance:
 
 ---
 
+
+## M20 — Requirement baseline
+
+### M20.1 Freeze the shall statements
+
+Labels: `requirements`
+
+Depends on: M1.1, M14.1.
+
+Write `docs/requirements.md`. Each shall statement has an id, a hazard id, and a verification method: test, analysis, or review. No requirement without a verification method. Threshold numbers are referenced from the spec notes, not copied.
+
+Acceptance:
+
+- [ ] Every hazard in M1.1 and M13.3 has at least one shall.
+- [ ] A requirement with no verification method fails a table check.
+
+---
+
+## M21 — System safety method
+
+### M21.1 Severity and probability
+
+Labels: `requirements`
+
+Depends on: M1.1.
+
+Write `docs/safety-method.md` using the public MIL-STD-882 categories as the scale, labeled as the project scale rather than a finding. Each hazard gets a severity and a qualitative probability before and after the monitor. The after column has to name the control: spec stream, switch invariant, or grant check.
+
+Acceptance:
+
+- [ ] Every hazard row has both columns filled.
+- [ ] A control named here exists as a stream or a test.
+
+---
+
+## M22 — Flight-controller interface control
+
+### M22.1 Mode and setpoint contract
+
+Labels: `io`
+
+Depends on: M6.4, M0.2.
+
+Write `docs/icd-fc.md`. Message ids, rates, units, and the mode enum for the dialect frozen in M0.2. State what the flight controller does on a missed setpoint heartbeat, because that is the fail-closed path if the companion dies.
+
+Acceptance:
+
+- [ ] ICD names the messages the adapter sends and the ones it reads.
+- [ ] Companion-death behavior is the flight controller's own failsafe, not a hope.
+
+---
+
+## M23 — Time base
+
+### M23.1 Monotonic tick clock
+
+Labels: `host`
+
+Depends on: M4.2, M1.3.
+
+Ages are computed from a monotonic clock, not wall time. A backward wall-clock step must not shrink `fix_age_ms` or extend a grant window. Write the choice in `docs/time.md`.
+
+Acceptance:
+
+- [ ] Test: wall clock jumps back, ages do not decrease.
+- [ ] Grant expiry uses the same clock as the tick log.
+
+---
+
+## M24 — Reproducible build
+
+### M24.1 Lock and toolchain record
+
+Labels: `repo`
+
+Depends on: M0.2, M18.1.
+
+CI builds from `Cargo.lock` and `rust-toolchain.toml` only. Document the container or the runner image digest in `docs/do178/sci.md`. A floating runner image is a gap, written down if it cannot be pinned yet.
+
+Acceptance:
+
+- [ ] Two CI runs of the same commit produce the same lockfile hash.
+- [ ] The index names the toolchain version.
+
+---
+
+## M25 — Static analysis
+
+### M25.1 Clippy and an extra lint set
+
+Labels: `verify`
+
+Depends on: M0.1, M5.2.
+
+Clippy is already denied warnings. Add a documented extra set for the switch crate: unwrap forbidden, expect forbidden outside tests, indexing forbidden on the command path. Record what the lints do not catch.
+
+Acceptance:
+
+- [ ] A deliberate unwrap in `rta-switch` fails CI.
+- [ ] The gap note says lints are not a proof.
+
+---
+
+## M26 — Structural coverage
+
+### M26.1 Coverage of the switch
+
+Labels: `verify`
+
+Depends on: M8.1, M16.1.
+
+Measure line and branch coverage of `rta-switch` in CI. The PSAC names the target. Start at 100 percent of `decide` and the fail-closed match arms. Uncovered arms fail the job. Host and tracker coverage is reported and not gated until their software level says so.
+
+Acceptance:
+
+- [ ] CI artifact contains the coverage report.
+- [ ] An untested `Revert` arm fails the job.
+
+---
+
+## M27 — Common-mode failures
+
+### M27.1 Shared-sensor note
+
+Labels: `requirements`
+
+Depends on: M2.2, M11.2, M12.1.
+
+Write `docs/common-mode.md`. The fence check, the barrier, and the shadow net all consume the same position estimate. A wrong-but-fresh estimate defeats all three. The control is the fix-age stream plus the grant window, and the note says that is not an independent measurement.
+
+Acceptance:
+
+- [ ] Each shared input lists the consumers.
+- [ ] No sentence claims sensor diversity the aircraft does not have.
+
+---
+
+## M28 — Watchdog independence
+
+### M28.1 Separate execution path
+
+Labels: `switch`
+
+Depends on: M5.4, M27.1.
+
+The watchdog thread does not call the interpreter, the filter, or the tracker. Document the shared resources it still has: the socket and the clock. A test kills the eval thread and asserts a mode command from the watchdog path.
+
+Acceptance:
+
+- [ ] Source review note lists shared resources.
+- [ ] Kill test passes without the interpreter running.
+
+---
+
+## M29 — Parameter data
+
+### M29.1 Config as a parameter item
+
+Labels: `assurance`
+
+Depends on: M0.3, M18.1.
+
+DO-178C treats parameter data as its own item. Hash `config/example.toml` into the configuration index. A flight config that differs from the example is a named file with its own hash, not an untracked edit. Unknown keys still fail closed.
+
+Acceptance:
+
+- [ ] Index has a row for the example config hash.
+- [ ] A changed config without an index update fails M18.2.
+
+---
+
+## M30 — Startup and shutdown
+
+### M30.1 Order of operations
+
+Labels: `host`
+
+Depends on: M4.1, M6.1, M7.1.
+
+Write `docs/startup.md`. Order: config, spec load, log open, then socket. Shutdown: stop setpoints, send recovery mode, flush the log, then exit. A failed step does not skip ahead to the socket.
+
+Acceptance:
+
+- [ ] Test that a spec load error does not construct the link.
+- [ ] Shutdown test asserts the mode command before the log flush completes.
+
+---
+
+## M31 — Degraded-mode matrix
+
+### M31.1 What still flies
+
+Labels: `requirements`
+
+Depends on: M1.2, M12.1, M15.2.
+
+Write `docs/degraded.md`. Rows are lost tracker, lost grant, shadow only, filter timeout, stale link. Columns are navigation allowed, commit allowed, recovery commanded. Commit is never allowed on a degraded row.
+
+Acceptance:
+
+- [ ] Matrix matches the verdict tests.
+- [ ] No degraded row has commit allowed.
+
+---
+
+## M32 — Log schema version
+
+### M32.1 Header and reader
+
+Labels: `replay`
+
+Depends on: M7.1, M7.2.
+
+The log header carries a schema version. `rta-replay` rejects an unknown version instead of guessing fields. Adding an input field is a version bump, already required by M2.1, and this task enforces it at the reader.
+
+Acceptance:
+
+- [ ] A fixture with the wrong version exits non-zero.
+- [ ] The current version is named in `docs/log-format.md`.
+
+---
+
+## M33 — Operator latency budget
+
+### M33.1 Withdraw to inhibit
+
+Labels: `authority`
+
+Depends on: M14.2, M1.3.
+
+Write the budget from withdraw message to commit inhibited: one tick plus link age, starting number 100 ms after receipt, labeled an assumption until M10 measures it. A withdraw that arrives mid-tick inhibits the next command, never the one already handed to the socket in that tick. The already-sent command is logged as in flight.
+
+Acceptance:
+
+- [ ] Test: withdraw during eval inhibits the following tick.
+- [ ] Budget number lives in the timing doc.
+
+---
+
+## M34 — Simulation claims
+
+### M34.1 What SITL shows
+
+Labels: `sim`
+
+Depends on: M9.2, M9.3.
+
+`docs/sitl.md` gains a claims table. Shown: mode change on fence breach, inhibit on weak track, revert on heartbeat loss, in simulation. Not shown: aerodynamic truth, latency on the target, tracker performance. A test name may not be cited outside its column.
+
+Acceptance:
+
+- [ ] Each M9 script is in the shown column.
+- [ ] Target timing is in the not-shown column.
+
+---
+
+## M35 — Tracker adversarial cases
+
+### M35.1 Bad frames
+
+Labels: `tracker`
+
+Depends on: M15.2, M2.2.
+
+Fixtures: frozen frame, empty frame, confidence NaN from the detector, two tracks when the port allows one. The port emits one sample or a miss. A miss uses the M2.2 hold policy. The detector does not pick a track inside the switch.
+
+Acceptance:
+
+- [ ] Four fixtures, each with an expected port output.
+- [ ] Switch tests still take a port sample, not a frame.
+
+---
+
+## M36 — Spec change gate
+
+### M36.1 Review before swap
+
+Labels: `spec`
+
+Depends on: M13.2, M3.3, M7.3.
+
+A spec change in git or in a bundle requires the golden fixtures and `docs/spec-notes.md` in the same change. CI fails if `monitor.lola` changes and the notes file does not. The on-aircraft swap already replays `must_hold`. This gate is the ground copy of that rule.
+
+Acceptance:
+
+- [ ] CI test: spec hunk without a notes hunk fails.
+- [ ] The reload bundle carries the notes file hash.
+
+---
+
+## M37 — Release checklist
+
+### M37.1 Ground release
+
+Labels: `docs`
+
+Depends on: M18.1, M16.3, M10.1.
+
+`docs/release.md` is the ordered list for a ground release: tests green, coverage artifact present, index hashes match, target measurement dated, gaps copied into the packet, spec notes current. A release tag points at that commit. No in-flight learning bundle is part of a ground release.
+
+Acceptance:
+
+- [ ] Checklist items map to files or CI jobs.
+- [ ] Tag procedure refuses a dirty index.
+
+---
+
+## M38 — Data rights and third-party code
+
+### M38.1 Notices
+
+Labels: `repo`
+
+Depends on: M0.2.
+
+`docs/third-party.md` lists rtlola, mavlink, and GStreamer bindings with their licenses and the crate that depends on them. `cargo deny` remains the check. A new copyleft dependency fails CI rather than getting a waiver inside a feature task.
+
+Acceptance:
+
+- [ ] Each direct dependency is in the notice file.
+- [ ] Deny config matches the notice.
+
+---
+
+## M39 — Residual risk note
+
+### M39.1 What remains accepted
+
+Labels: `assurance`
+
+Depends on: M21.1, M16.3, M27.1.
+
+`docs/residual-risk.md` lists hazards whose after-control probability is not zero: wrong-but-fresh estimate, confident wrong track, grant issued on bad information, model error in the barrier. Each row names the remaining control and the person who would have to accept it. This repository does not accept it on their behalf.
+
+Acceptance:
+
+- [ ] Every common-mode item from M27 appears here.
+- [ ] No row says the risk is closed.
+
+---
+
 ## Still out of scope
+
 
 
 - Arming circuits, fuzes, safe-and-arm devices, and release actuators.
