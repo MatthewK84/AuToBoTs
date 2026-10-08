@@ -93,7 +93,48 @@ A spec change is a process restart and a golden-trace review. There is no hot re
 | Link | `rta-host/src/link.rs` | UDP parses. Serial is not built. |
 | Evidence | `scripts/evidence.sh` | SBOM and provenance hook |
 
-Still open: a real MAVLink heartbeat sink, the watchdog thread, reported-mode dispatch, and fixture replay through the interpreter. Those issues stay open.
+## Missing features
+
+These are not on `main`. The issues stay open until the acceptance tests exist.
+
+```mermaid
+flowchart TD
+    built[On main: record, spec, switch, stub link]
+    built --> link[MAVLink heartbeat and command out]
+    built --> watch[Watchdog thread]
+    built --> dispatch[Reported-mode dispatch]
+    built --> gaps[Autonomy gaps]
+    gaps --> override[Pilot override]
+    gaps --> energy[Energy to rally]
+    gaps --> estimator[Estimator health]
+    gaps --> phase[Mission phase and abort]
+    gaps --> denied[Coast quality in denied navigation]
+    gaps --> protect[Protected-entity inhibit]
+    gaps --> traffic[Airborne deconfliction]
+    gaps --> grant[Grant window versus monotonic time]
+```
+
+| Feature | Why it is missing | Issue |
+| --- | --- | --- |
+| Reported-mode dispatch | Revert should send the recovery mode only when the flight controller is not already in it. | [#17](https://github.com/MatthewK84/AuToBoTs/issues/17) |
+| No-verdict path | A tick with no verdict must call the switch as `Revert`. | [#18](https://github.com/MatthewK84/AuToBoTs/issues/18) |
+| Watchdog thread | Missed published ticks must command recovery without calling the interpreter. | [#19](https://github.com/MatthewK84/AuToBoTs/issues/19) |
+| MAVLink heartbeat | The companion must be visible to the flight controller within 1.5 s. The link only stub-binds. | [#20](https://github.com/MatthewK84/AuToBoTs/issues/20) |
+| Dialect state inputs | Position and heartbeat message ids are not written in `docs/mavlink.md`. | [#21](https://github.com/MatthewK84/AuToBoTs/issues/21) |
+| Tracker port | Confidence and range need a fake tracker trait. No video decode. | [#22](https://github.com/MatthewK84/AuToBoTs/issues/22) |
+| Command out | Mode and setpoints are not yet dialect messages. | [#23](https://github.com/MatthewK84/AuToBoTs/issues/23) |
+| Fixture replay | `spec/fixtures/verdicts.json` is not yet run through the interpreter. | M7.3 |
+| Pilot override | A stick, a mode change, or RC takeover must beat the companion in the same tick. | [#179](https://github.com/MatthewK84/AuToBoTs/issues/179) |
+| Energy to rally | Revert while the rally is still reachable, not after it is not. | [#180](https://github.com/MatthewK84/AuToBoTs/issues/180) |
+| Estimator health | A fresh wrong position is only an age today. | [#181](https://github.com/MatthewK84/AuToBoTs/issues/181) |
+| Mission phase | Search, track, commit, and abort are not states the monitor can see. | [#182](https://github.com/MatthewK84/AuToBoTs/issues/182) |
+| Abort of a sent commit | Withdraw stops the next tick. The command already on the wire has no cancel. | [#183](https://github.com/MatthewK84/AuToBoTs/issues/183) |
+| Denied navigation | No coast-quality or inertial-only input. | [#184](https://github.com/MatthewK84/AuToBoTs/issues/184) |
+| Protected-entity inhibit | No no-strike list and no second-track miss. | [#185](https://github.com/MatthewK84/AuToBoTs/issues/185) |
+| Airborne deconfliction | Nothing looks at another aircraft. | [#186](https://github.com/MatthewK84/AuToBoTs/issues/186) |
+| Grant time | The tick clock is monotonic. A grant window is wall time. | [#187](https://github.com/MatthewK84/AuToBoTs/issues/187) |
+| Evidence pack | SBOM, provenance, log redaction, and the human-accountability line are hooked, not a compliance claim. | [#188](https://github.com/MatthewK84/AuToBoTs/issues/188) |
+
 
 ## Crates
 
