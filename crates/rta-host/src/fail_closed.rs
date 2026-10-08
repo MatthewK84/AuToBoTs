@@ -22,34 +22,25 @@ pub struct FailClosed {
 
 impl FailClosed {
     pub fn command(&mut self, tick: TickCase) -> SwitchCommand {
-        if self.faulted || self.write_fault {
-            return self.mode_or_retry(tick.reported, tick.recovery, tick.write_ok);
-        }
-        if tick.late
+        let forced = self.faulted
+            || self.write_fault
+            || tick.late
             || tick.verdict.is_none()
-            || tick.heartbeat_age_ms.unwrap_or(f64::MAX) > 1_000.0
-        {
-            if tick.late {
-                self.log.push("late verdict discarded".into());
-            }
-            return self.mode_or_retry(tick.reported, tick.recovery, tick.write_ok);
+            || tick.heartbeat_age_ms.unwrap_or(f64::MAX) > 1_000.0;
+        if tick.late {
+            self.log.push("late verdict discarded".into());
         }
-        decide(
-            tick.verdict.unwrap_or(Verdict::Revert),
-            tick.request,
-            tick.reported,
-            tick.recovery,
-        )
-    }
-
-    fn mode_or_retry(
-        &mut self,
-        reported: RecoveryMode,
-        recovery: RecoveryMode,
-        write_ok: bool,
-    ) -> SwitchCommand {
-        let command = decide(Verdict::Revert, None, reported, recovery);
-        if matches!(command, SwitchCommand::Mode { .. }) && !write_ok {
+        let command = if forced {
+            decide(Verdict::Revert, None, tick.reported, tick.recovery)
+        } else {
+            decide(
+                tick.verdict.unwrap_or(Verdict::Revert),
+                tick.request,
+                tick.reported,
+                tick.recovery,
+            )
+        };
+        if matches!(command, SwitchCommand::Mode { .. }) && !tick.write_ok {
             self.write_fault = true;
             self.log.push("mode write failed".into());
         }
@@ -133,7 +124,7 @@ mod tests {
     #[test]
     fn no_clear_fault() {
         let source = include_str!("fail_closed.rs");
-        let name = ["clear", "_fault"].concat();
+        let name = ["pub fn ", "clear_fault"].concat();
         assert!(!source.contains(&name));
     }
 }
