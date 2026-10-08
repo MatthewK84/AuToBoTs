@@ -108,6 +108,7 @@ fn main() -> ExitCode {
         command: tick_log::command_name(&rta_switch::SwitchCommand::Idle),
         eval_ms: 0,
         spec_hash,
+        alt_m: 0.0,
     };
     if tick_log.append(&record_line).is_err() {
         let _latched = tick_log::on_write_error();

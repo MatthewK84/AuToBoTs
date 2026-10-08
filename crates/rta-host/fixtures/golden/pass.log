@@ -1,0 +1,2 @@
+# rta-log 1 spec_hash=0000000000000000 hazard=none
+tick=1 fence_ok=1 fix_age_ms=10 link_age_ms=10 fc_heartbeat_age_ms=10 track_conf=0.9 range_m=400 alt_m=30 verdict=pass reasons= command=idle eval_ms=1 spec_hash=0000000000000000

@@ -23,6 +23,7 @@ pub struct TickRecord {
     pub command: String,
     pub eval_ms: u64,
     pub spec_hash: u64,
+    pub alt_m: f64,
 }
 
 pub struct TickLog<W: Write> {
@@ -138,6 +139,7 @@ mod tests {
             command: "idle".into(),
             eval_ms: 1,
             spec_hash: 7,
+            alt_m: 0.0,
         }
     }
 
