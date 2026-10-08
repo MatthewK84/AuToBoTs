@@ -4,6 +4,7 @@
 mod config;
 mod event;
 mod fence;
+mod mode;
 mod monitor;
 mod spec;
 mod stale;
@@ -74,6 +75,14 @@ fn main() -> ExitCode {
         std::time::Duration::from_millis(config.tick.deadline_ms),
     );
     let _faulted = ticks.faulted();
+    let mut modes = mode::ModeSender::default();
+    let mut sink = Vec::new();
+    let recovery = match config.recovery.mode {
+        config::RecoveryMode::Rtl => rta_spec::RecoveryMode::Rtl,
+        config::RecoveryMode::Loiter => rta_spec::RecoveryMode::Loiter,
+        config::RecoveryMode::Land => rta_spec::RecoveryMode::Land,
+    };
+    let _mode = modes.send(rta_spec::Verdict::Pass, None, recovery, &mut sink);
     println!("rta-host: config accepted, no link opened");
     ExitCode::SUCCESS
 }
