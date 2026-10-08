@@ -86,6 +86,8 @@ pub fn hazard_verdict(id: HazardId) -> Option<Verdict> {
 
 pub const INPUT_RECORD_VERSION: u32 = 1;
 
+pub const REQUIRED_OUTPUTS: &[&str] = &["revert", "inhibit"];
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InputRecord {
