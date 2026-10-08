@@ -1,25 +1,8 @@
 //! Host binary. Forbidden: a direct MAVLink write that skips `rta-switch::decide`.
 //! Config load failure exits before a socket type is constructed.
 
-mod command_out;
-mod config;
-mod eval;
-mod event;
-mod fail_closed;
-mod fence;
-mod link;
-mod link_age;
-mod mavlink_link;
-mod mode;
-mod monitor;
-mod read;
-mod spec;
-mod stale;
-mod tick;
-mod tick_log;
-mod tracker;
-use crate::tracker::Tracker;
-mod watchdog;
+use rta_host::tracker::Tracker;
+use rta_host::*;
 
 use std::env;
 use std::process::ExitCode;

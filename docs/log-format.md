@@ -28,3 +28,5 @@ Space-separated fields:
 - `spec_hash`
 
 The file is flushed every `log.flush_every_n` records.
+
+`rta-replay <log> <spec>` re-evaluates each record. A verdict mismatch prints the tick, expected verdict, actual verdict, and the input record, then exits non-zero.
