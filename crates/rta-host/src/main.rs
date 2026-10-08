@@ -14,6 +14,7 @@ mod read;
 mod spec;
 mod stale;
 mod tick;
+mod watchdog;
 
 use std::env;
 use std::process::ExitCode;
@@ -134,6 +135,16 @@ fn main() -> ExitCode {
         recovery,
         write_ok: true,
     });
+    let mut dog = watchdog::Watchdog::new(config.tick.period_ms, config.tick.watchdog_misses);
+    dog.publish(0);
+    let mut dog_sink = Vec::new();
+    dog.check(
+        0,
+        rta_spec::RecoveryMode::Loiter,
+        recovery,
+        &mut modes,
+        &mut dog_sink,
+    );
     println!("rta-host: config accepted, stub bind {bound:?}");
     ExitCode::SUCCESS
 }
