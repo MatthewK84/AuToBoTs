@@ -1,4 +1,20 @@
 input fence_ok: Bool
+input fix_age_ms: Float
+input link_age_ms: Float
+input fc_heartbeat_age_ms: Float
+input track_conf: Float
+input range_m: Float
 
-output revert: Bool := !fence_ok
-output inhibit: Bool := revert
+output fix_stale: Bool := fix_age_ms > 500.0
+output link_stale: Bool := link_age_ms > 300.0
+output heartbeat_stale: Bool := fc_heartbeat_age_ms > 1000.0
+output weak_track: Bool := track_conf < 0.40
+output inside_commit: Bool := range_m < 150.0
+output revert: Bool := !fence_ok || fix_stale || link_stale || heartbeat_stale
+output inhibit: Bool := revert || (inside_commit && weak_track)
+
+trigger !fence_ok "fence"
+trigger fix_stale "fix"
+trigger link_stale "link"
+trigger heartbeat_stale "heartbeat"
+trigger inside_commit && weak_track "weak_track"
