@@ -7,3 +7,11 @@ license = "Apache-2.0"
 
 [dependencies]
 rta-spec = { path = "../rta-spec" }
+
+[features]
+default = []
+verify = ["dep:kani-verifier"]
+
+[dependencies.kani-verifier]
+version = "=0.68.0"
+optional = true
