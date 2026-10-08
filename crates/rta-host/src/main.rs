@@ -5,6 +5,7 @@ mod config;
 mod event;
 mod fence;
 mod link;
+mod link_age;
 mod mode;
 mod monitor;
 mod read;
@@ -106,6 +107,9 @@ fn main() -> ExitCode {
     }
     let mut partial = read::PartialRecord::default();
     let _read = read::apply(&[], 0, &mut partial);
+    let mut link_age = link_age::LinkAge::new();
+    link_age.observe(link_age::LinkMessage::StatusText, 0);
+    let _age = link_age.age_ms(0);
     println!("rta-host: config accepted, stub bind {bound:?}");
     ExitCode::SUCCESS
 }
