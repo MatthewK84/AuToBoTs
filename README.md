@@ -151,7 +151,11 @@ Rust 1.98.1, rustfmt, and clippy are pinned in `rust-toolchain.toml`.
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo deny check
+./scripts/wait-ci.sh
 ```
+
+`scripts/wait-ci.sh` blocks until the push run for this commit finishes. It exits non-zero if CI fails.
+
 
 The example config is `config/example.toml`. A missing or invalid file exits before a socket. The predicate source is `spec/monitor.lola`.
 
