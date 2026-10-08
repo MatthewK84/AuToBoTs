@@ -117,6 +117,15 @@ mod tests {
     }
 
     #[test]
+    fn inhibit_does_not_keep_commit() {
+        let mut input = ok();
+        input.grant_present = false;
+        let (command, log) = decide(&input);
+        assert_eq!(log.verdict, Verdict::Inhibit);
+        assert_ne!(command, Command::Commit);
+    }
+
+    #[test]
     fn abort_does_not_commit() {
         let mut input = ok();
         input.abort_requested = true;
