@@ -13,10 +13,11 @@ impl ModeSender {
         &mut self,
         verdict: Verdict,
         request: Option<Request>,
+        reported: RecoveryMode,
         recovery: RecoveryMode,
         sink: &mut Vec<String>,
     ) -> SwitchCommand {
-        let command = decide(verdict, request, recovery);
+        let command = decide(verdict, request, reported, recovery);
         if let SwitchCommand::Mode { recovery } = command {
             if !self.recovery_sent {
                 sink.push(format!("mode {recovery:?}"));
@@ -35,8 +36,20 @@ mod tests {
     fn two_revert_ticks_send_one_mode() {
         let mut sender = ModeSender::default();
         let mut sink = Vec::new();
-        sender.send(Verdict::Revert, None, RecoveryMode::Rtl, &mut sink);
-        sender.send(Verdict::Revert, None, RecoveryMode::Rtl, &mut sink);
+        sender.send(
+            Verdict::Revert,
+            None,
+            RecoveryMode::Loiter,
+            RecoveryMode::Rtl,
+            &mut sink,
+        );
+        sender.send(
+            Verdict::Revert,
+            None,
+            RecoveryMode::Loiter,
+            RecoveryMode::Rtl,
+            &mut sink,
+        );
         assert_eq!(sink.len(), 1);
     }
 
