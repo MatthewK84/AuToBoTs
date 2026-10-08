@@ -1,0 +1,9 @@
+[package]
+name = "rta-switch"
+version = "0.1.0"
+edition = "2021"
+description = "Fail-closed command decision. No interpreter, no MAVLink, no release path."
+license = "Apache-2.0"
+
+[dependencies]
+rta-spec = { path = "../rta-spec" }

@@ -1,0 +1,22 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --workspace
+  evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require SBOM and provenance on tags
+        run: |
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            sh scripts/evidence.sh
+          else
+            echo "evidence job skipped off tag; tag builds fail closed"
+          fi
