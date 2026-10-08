@@ -25,4 +25,4 @@ This repository bounds flight and commit. It does not assure a tactical decision
 
 Task list only. Implementation starts at M0.1.
 
-Expanded scope is in `docs/engineering-tasks-m11.md`: control-barrier filter (M11), untrusted shadow network (M12), signed spec reload (M13), commit authority (M14), GStreamer tracker (M15), DO-178C evidence package (M16). Recovery the switch trusts remains the flight controller. Arming circuits, fuzes, and release actuators stay out of this repository.
+The milestone list is `docs/milestone-list.md`. M0–M39 are in `docs/engineering-tasks.md`. M20–M39 are the twenty added after the expanded-scope work, and each has a GitHub milestone. Recovery the switch trusts remains the flight controller. Arming circuits, fuzes, safe-and-arm devices, and release actuators stay out of this repository.
