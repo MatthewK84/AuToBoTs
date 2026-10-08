@@ -3268,7 +3268,35 @@ Acceptance:
 - [ ] The standards file links it.
 - [ ] No workflow treats an AI commit as reviewed by itself.
 
+
+## M142 — Implement the standards gate
+
+### M142.1 Implement the 3000.09 and 8430.01 gate
+
+Labels: `assurance`
+
+Depends on: M141.1, M141.2, M141.3, M141.4, M141.5, M14.1, M140.5.
+
+Implement the acceptance gate in docs/standards-3000-09-8430-01.md. This task does not certify the software and does not add a weapon, a fuze, or a release actuator.
+
+Work:
+
+1. Add a CI evidence job that fails if the SBOM artifact or the provenance record is missing on a tag build. Compile stays a separate job.
+2. Add the log-schema test that rejects a grant body, a raw signature, and a frame field.
+3. Add docs/review.md with the human-reviewer line required by DoWI 8430.01 section 3.6. The reviewer is not the agent that wrote the change.
+4. Wire the commit path so a missing grant, a failed coast check, a pilot override, or an abort inhibits or reverts, and the tick log records the reason code.
+5. Point the authorizing-official packet index at the standards file and at the evidence artifacts. Label SITL developmental.
+
+Acceptance:
+
+- [ ] Evidence job is red without an SBOM and a provenance record.
+- [ ] Log test rejects a grant body and a frame.
+- [ ] docs/review.md exists and is linked from the standards file.
+- [ ] A commit without a grant does not emit a commit command.
+- [ ] No sentence in the packet says the repository meets 3000.09 or 8430.01.
+
 ## Still out of scope
+
 
 
 
