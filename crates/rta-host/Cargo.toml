@@ -14,7 +14,7 @@ rta-spec = { path = "../rta-spec", version = "0.1.0" }
 rta-switch = { path = "../rta-switch", version = "0.1.0" }
 rtlola-interpreter = "=0.11.0"
 rtlola-frontend = "=0.8.0"
-mavlink = { version = "=0.18.0", default-features = false, features = ["std", "serde", "dialect-common"] }
+mavlink = { version = "=0.18.0", default-features = false, features = ["std", "serde", "dialect-common", "transport-udp", "transport-direct-serial"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 ordered-float = "=3.9.2"
