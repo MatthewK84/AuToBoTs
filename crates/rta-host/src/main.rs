@@ -16,6 +16,7 @@ mod read;
 mod spec;
 mod stale;
 mod tick;
+mod tick_log;
 mod tracker;
 use crate::tracker::Tracker;
 mod watchdog;
@@ -99,6 +100,35 @@ fn main() -> ExitCode {
         recovery,
         &mut sink,
     );
+    let spec_hash = tick_log::spec_hash(spec_text.as_bytes());
+    let mut tick_log = match tick_log::TickLog::open(
+        std::path::Path::new(&config.log.path),
+        config.log.flush_every_n,
+        spec_hash,
+    ) {
+        Ok(log) => log,
+        Err(err) => {
+            eprintln!("log: {err}");
+            return ExitCode::from(1);
+        }
+    };
+    let record_line = tick_log::TickRecord {
+        tick: 0,
+        fence_ok: false,
+        fix_age_ms: 0.0,
+        link_age_ms: 0.0,
+        fc_heartbeat_age_ms: 0.0,
+        track_conf: 0.0,
+        range_m: 0.0,
+        verdict: rta_spec::Verdict::Pass,
+        reasons: Vec::new(),
+        command: tick_log::command_name(&rta_switch::SwitchCommand::Idle),
+        eval_ms: 0,
+        spec_hash,
+    };
+    if tick_log.append(&record_line).is_err() {
+        let _latched = tick_log::on_write_error();
+    }
     let endpoint = match link::parse_endpoint(&config.link.endpoint) {
         Ok(endpoint) => endpoint,
         Err(err) => {
