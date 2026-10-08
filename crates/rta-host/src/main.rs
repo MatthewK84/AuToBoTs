@@ -86,7 +86,13 @@ fn main() -> ExitCode {
         config::RecoveryMode::Loiter => rta_spec::RecoveryMode::Loiter,
         config::RecoveryMode::Land => rta_spec::RecoveryMode::Land,
     };
-    let _mode = modes.send(rta_spec::Verdict::Pass, None, recovery, &mut sink);
+    let _mode = modes.send(
+        rta_spec::Verdict::Pass,
+        None,
+        rta_spec::RecoveryMode::Loiter,
+        recovery,
+        &mut sink,
+    );
     let endpoint = match link::parse_endpoint(&config.link.endpoint) {
         Ok(endpoint) => endpoint,
         Err(err) => {

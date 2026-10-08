@@ -32,6 +32,7 @@ pub enum SwitchCommand {
     Mode {
         recovery: rta_spec::RecoveryMode,
     },
+    Idle,
 }
 
 pub trait Complex {
@@ -50,9 +51,11 @@ impl Complex for StubComplex {
 pub fn decide(
     verdict: Verdict,
     request: Option<Request>,
+    reported_mode: rta_spec::RecoveryMode,
     recovery: rta_spec::RecoveryMode,
 ) -> SwitchCommand {
     match verdict {
+        Verdict::Revert if reported_mode == recovery => SwitchCommand::Idle,
         Verdict::Revert => SwitchCommand::Mode { recovery },
         Verdict::Inhibit => setpoints(request, false),
         Verdict::Pass => setpoints(request, request.is_some_and(|item| item.commit)),
@@ -163,7 +166,12 @@ mod tests {
             yaw: 0.0,
             commit: false,
         };
-        match decide(Verdict::Pass, Some(request), rta_spec::RecoveryMode::Rtl) {
+        match decide(
+            Verdict::Pass,
+            Some(request),
+            rta_spec::RecoveryMode::Loiter,
+            rta_spec::RecoveryMode::Rtl,
+        ) {
             SwitchCommand::Setpoints { commit: false, .. } => {}
             other => panic!("{other:?}"),
         }
@@ -181,6 +189,7 @@ mod tests {
         match decide(
             Verdict::Inhibit,
             Some(request),
+            rta_spec::RecoveryMode::Rtl,
             rta_spec::RecoveryMode::Loiter,
         ) {
             SwitchCommand::Setpoints { commit: false, .. } => {}
@@ -199,14 +208,53 @@ mod tests {
                 yaw: 0.0,
                 commit: true,
             }),
+            rta_spec::RecoveryMode::Rtl,
             rta_spec::RecoveryMode::Land,
         ) {
             SwitchCommand::Mode {
                 recovery: rta_spec::RecoveryMode::Land,
             } => {}
+            SwitchCommand::Idle => panic!("revert was already in the recovery mode"),
             SwitchCommand::Mode { .. } => panic!("revert changed the configured mode"),
             SwitchCommand::Setpoints { .. } => panic!("revert returned setpoints"),
         }
+    }
+
+    #[test]
+    fn reported_mode_table() {
+        let request = Request {
+            north: 1.0,
+            east: 0.0,
+            down: 0.0,
+            yaw: 0.0,
+            commit: true,
+        };
+        let same = rta_spec::RecoveryMode::Rtl;
+        let other = rta_spec::RecoveryMode::Land;
+        assert!(matches!(
+            decide(Verdict::Pass, Some(request), other, same),
+            SwitchCommand::Setpoints { commit: true, .. }
+        ));
+        assert!(matches!(
+            decide(Verdict::Pass, None, other, same),
+            SwitchCommand::Setpoints { commit: false, .. }
+        ));
+        assert!(matches!(
+            decide(Verdict::Inhibit, Some(request), other, same),
+            SwitchCommand::Setpoints { commit: false, .. }
+        ));
+        assert!(matches!(
+            decide(Verdict::Inhibit, None, other, same),
+            SwitchCommand::Setpoints { commit: false, .. }
+        ));
+        assert!(matches!(
+            decide(Verdict::Revert, Some(request), other, same),
+            SwitchCommand::Mode { .. }
+        ));
+        assert!(matches!(
+            decide(Verdict::Revert, None, same, same),
+            SwitchCommand::Idle
+        ));
     }
 
     #[test]
@@ -214,8 +262,14 @@ mod tests {
         let mut stub = StubComplex;
         let request = stub.request();
         assert!(request.is_none());
-        match decide(Verdict::Revert, request, rta_spec::RecoveryMode::Rtl) {
+        match decide(
+            Verdict::Revert,
+            request,
+            rta_spec::RecoveryMode::Loiter,
+            rta_spec::RecoveryMode::Rtl,
+        ) {
             SwitchCommand::Mode { .. } => {}
+            SwitchCommand::Idle => panic!("stub request was treated as already recovered"),
             SwitchCommand::Setpoints { .. } => panic!("stub request appeared in revert"),
         }
     }
@@ -239,13 +293,18 @@ mod tests {
             (Verdict::Pass, None, false),
         ];
         for (verdict, request, mode) in rows {
-            let command = decide(verdict, request, recovery);
+            let command = decide(verdict, request, rta_spec::RecoveryMode::Loiter, recovery);
             assert_eq!(matches!(command, SwitchCommand::Mode { .. }), mode);
             if let SwitchCommand::Setpoints { commit, .. } = command {
                 assert!(!commit || verdict == Verdict::Pass);
             }
         }
-        match decide(Verdict::Pass, Some(pending), recovery) {
+        match decide(
+            Verdict::Pass,
+            Some(pending),
+            rta_spec::RecoveryMode::Loiter,
+            recovery,
+        ) {
             SwitchCommand::Setpoints {
                 commit: true,
                 north: 1.0,
