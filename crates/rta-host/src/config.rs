@@ -29,6 +29,7 @@ pub struct Tick {
     pub period_ms: u64,
     pub deadline_ms: u64,
     pub watchdog_misses: u32,
+    pub mode_change_latency_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -99,6 +100,11 @@ fn validate(config: &Config) -> Result<(), ConfigError> {
     if config.tick.watchdog_misses < 1 {
         return Err(ConfigError(
             "tick.watchdog_misses must be at least 1".into(),
+        ));
+    }
+    if config.tick.mode_change_latency_ms < 1 {
+        return Err(ConfigError(
+            "tick.mode_change_latency_ms must be at least 1".into(),
         ));
     }
     if config.log.flush_every_n < 1 {
