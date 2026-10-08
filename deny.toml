@@ -9,6 +9,7 @@ ignore = [
 allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "Unicode-3.0"]
 exceptions = [
   { allow = ["LGPL-3.0", "MPL-2.0"], crate = "priority-queue" },
+  { allow = ["MPL-2.0"], crate = "serialport" },
 ]
 
 [bans]
