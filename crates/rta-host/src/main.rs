@@ -2,6 +2,7 @@
 //! Config load failure exits before a socket type is constructed.
 
 mod config;
+mod fence;
 mod stale;
 
 use std::env;
@@ -24,6 +25,27 @@ fn main() -> ExitCode {
     let _value = std::any::type_name::<rtlola_interpreter::Value>();
     let _track = stale::present_track(false, 0.0, 0.0, 0.0, config.tick.tracker_hold_ms);
     let _fix = stale::present_fix(None, 0.0);
+    let _fence = match &config.fence {
+        config::Fence::Host {
+            polygon,
+            vertical_cap_m,
+            v_max,
+            a_max,
+        } => {
+            fence::fence_ok(
+                [0.0, 0.0],
+                0.0,
+                fence::FenceInput {
+                    polygon: &[],
+                    vertical_cap_m: *vertical_cap_m,
+                    v_max: *v_max,
+                    a_max: *a_max,
+                    mode_change_latency_s: config.tick.mode_change_latency_ms as f64 / 1000.0,
+                },
+            ) || polygon.is_empty()
+        }
+        config::Fence::Fc => false,
+    };
     println!("rta-host: config accepted, no link opened");
     ExitCode::SUCCESS
 }
