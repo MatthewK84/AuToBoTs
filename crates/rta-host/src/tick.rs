@@ -9,8 +9,11 @@ pub struct Outputs {
     pub inhibit: bool,
 }
 
+#[derive(Debug)]
+pub struct TickFault;
+
 pub trait Eval {
-    fn accept(&mut self) -> Result<Outputs, ()>;
+    fn accept(&mut self) -> Result<Outputs, TickFault>;
 }
 
 #[derive(Debug, Default)]
@@ -21,7 +24,7 @@ pub struct TickState {
 pub struct Idle;
 
 impl Eval for Idle {
-    fn accept(&mut self) -> Result<Outputs, ()> {
+    fn accept(&mut self) -> Result<Outputs, TickFault> {
         Ok(Outputs {
             revert: false,
             inhibit: false,
@@ -51,7 +54,7 @@ impl TickState {
             };
         }
         let verdict = match result {
-            Err(()) => {
+            Err(TickFault) => {
                 self.interpreter_fault = true;
                 Verdict::Revert
             }
@@ -79,7 +82,7 @@ mod tests {
     }
 
     impl Eval for Slow {
-        fn accept(&mut self) -> Result<Outputs, ()> {
+        fn accept(&mut self) -> Result<Outputs, TickFault> {
             self.calls += 1;
             thread::sleep(Duration::from_millis(20));
             Ok(Outputs {
@@ -94,9 +97,9 @@ mod tests {
     }
 
     impl Eval for Fault {
-        fn accept(&mut self) -> Result<Outputs, ()> {
+        fn accept(&mut self) -> Result<Outputs, TickFault> {
             self.calls += 1;
-            Err(())
+            Err(TickFault)
         }
     }
 
