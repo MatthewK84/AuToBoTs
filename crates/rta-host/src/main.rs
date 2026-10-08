@@ -7,6 +7,7 @@ mod fence;
 mod link;
 mod mode;
 mod monitor;
+mod read;
 mod spec;
 mod stale;
 mod tick;
@@ -103,6 +104,8 @@ fn main() -> ExitCode {
         eprintln!("link: {err:?}");
         return ExitCode::from(1);
     }
+    let mut partial = read::PartialRecord::default();
+    let _read = read::apply(&[], 0, &mut partial);
     println!("rta-host: config accepted, stub bind {bound:?}");
     ExitCode::SUCCESS
 }
