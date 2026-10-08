@@ -1491,7 +1491,1513 @@ Acceptance:
 
 ---
 
+
+## M40–M139
+
+One hundred milestones added to this file. Each heading below is the task. Issues follow the heading id.
+
+## M40 — Requirement review gate
+
+### M40.1 Requirement review gate
+
+Labels: `requirements`
+
+Depends on: M20.1.
+
+A requirement change names the old shall, the new shall, and the tests that move with it. CI fails a requirements hunk with no test hunk.
+
+Acceptance:
+
+- [ ] A requirements-only diff fails the check.
+- [ ] The review note is in docs/requirements.md.
+
+## M41 — Derived requirements
+
+### M41.1 Derived requirements
+
+Labels: `requirements`
+
+Depends on: M20.1, M5.2.
+
+Derived requirements are the switch invariants written as shalls: no setpoint with a mode change, no commit on inhibit, missing verdict is revert.
+
+Acceptance:
+
+- [ ] Each derived shall names the enforcing type.
+- [ ] A derived shall with no test id fails the table check.
+
+## M42 — Tracker port requirements
+
+### M42.1 Tracker port requirements
+
+Labels: `io`
+
+Depends on: M6.3, M20.1.
+
+The port contract is a shall: confidence in 0 to 1, range non-negative, sample time monotonic. The tracker crate meets it. The switch does not import the tracker.
+
+Acceptance:
+
+- [ ] Port shalls are in the requirement file.
+- [ ] A switch dependency on the tracker crate fails CI.
+
+## M43 — Timing requirement trace
+
+### M43.1 Timing requirement trace
+
+Labels: `requirements`
+
+Depends on: M1.3, M20.1.
+
+Tick, deadline, and watchdog misses are shalls, sourced from config, not copied as a second number.
+
+Acceptance:
+
+- [ ] Timing doc links the shall ids.
+- [ ] A hardcoded deadline outside config fails review.
+
+## M44 — Safety change control
+
+### M44.1 Safety change control
+
+Labels: `requirements`
+
+Depends on: M21.1, M36.1.
+
+A hazard-row edit requires a spec-notes edit in the same change. The check is the same shape as the spec gate.
+
+Acceptance:
+
+- [ ] Hazard hunk without a notes hunk fails CI.
+- [ ] The rule is written in docs/safety-method.md.
+
+## M45 — Assumption log
+
+### M45.1 Assumption log
+
+Labels: `docs`
+
+Depends on: M1.3, M33.1.
+
+docs/assumptions.md lists mode-change latency, withdraw budget, and stopping distance as assumptions until a measurement replaces them.
+
+Acceptance:
+
+- [ ] Each assumption names the task that can retire it.
+- [ ] No assumption is written as a measured fact.
+
+## M46 — Constraint log
+
+### M46.1 Constraint log
+
+Labels: `docs`
+
+Depends on: M12.2, M1.3.
+
+docs/constraints.md lists the Group 1-3 bounds: deadline, power note, no second trusted net. A task that breaks a constraint says so in the same change.
+
+Acceptance:
+
+- [ ] The shadow-net compile-out rule is a row.
+- [ ] The file is linked from the README.
+
+## M47 — Open item log
+
+### M47.1 Open item log
+
+Labels: `docs`
+
+Depends on: M16.3.
+
+docs/open-items.md is the list of gaps the packet already names. An item closes only when a test or a measurement lands.
+
+Acceptance:
+
+- [ ] Each M16 gap is a row.
+- [ ] A closed row names a commit.
+
+## M48 — Waiver log
+
+### M48.1 Waiver log
+
+Labels: `assurance`
+
+Depends on: M17.1.
+
+A waived check names the check, the reason, and the expiry. A waiver with no expiry fails review. CI does not grow a silent allow list.
+
+Acceptance:
+
+- [ ] docs/waivers.md exists.
+- [ ] cargo deny has no unexplained allow.
+
+## M49 — Deviation record
+
+### M49.1 Deviation record
+
+Labels: `assurance`
+
+Depends on: M16.1.
+
+A deviation from a DO-178C objective names the objective, the alternative evidence, and the gap that remains. It is not a compliance sentence.
+
+Acceptance:
+
+- [ ] docs/do178/deviations.md exists.
+- [ ] The packet index links it.
+
+## M50 — Unit test inventory
+
+### M50.1 Unit test inventory
+
+Labels: `verify`
+
+Depends on: M8.1.
+
+docs/tests.md lists every switch table row and the test name. A public fn in rta-switch with no test is a row marked missing, and missing fails CI once the inventory job exists.
+
+Acceptance:
+
+- [ ] Inventory file exists.
+- [ ] decide is covered by name.
+
+## M51 — Integration test inventory
+
+### M51.1 Integration test inventory
+
+Labels: `verify`
+
+Depends on: M9.2, M50.1.
+
+Integration tests are the SITL scripts and the sink tests. The inventory says which hazard each one covers.
+
+Acceptance:
+
+- [ ] Each M9 script is a row.
+- [ ] A script with no hazard id fails review.
+
+## M52 — Regression suite
+
+### M52.1 Regression suite
+
+Labels: `verify`
+
+Depends on: M7.3, M50.1.
+
+The regression job is cargo test plus rta-replay on fixtures. It is the required check before a spec change merges.
+
+Acceptance:
+
+- [ ] CI job name is written in docs/tests.md.
+- [ ] A red replay blocks the spec gate.
+
+## M53 — Mutation check on the switch
+
+### M53.1 Mutation check on the switch
+
+Labels: `verify`
+
+Depends on: M8.1.
+
+A documented mutation: flip Revert to Pass in a copy of decide and show the table test fails. The mutation is not left in the tree.
+
+Acceptance:
+
+- [ ] The procedure is in docs/tests.md.
+- [ ] The live match arm still maps Revert to a mode command.
+
+## M54 — Property test on ages
+
+### M54.1 Property test on ages
+
+Labels: `verify`
+
+Depends on: M2.2, M23.1.
+
+Property test: ages are non-decreasing across a wall-clock step back, and a missing sample does not reset an age to zero.
+
+Acceptance:
+
+- [ ] Two properties run under cargo test.
+- [ ] A forced age decrease fails the test.
+
+## M55 — Fuzz the config parser
+
+### M55.1 Fuzz the config parser
+
+Labels: `verify`
+
+Depends on: M0.3.
+
+A cargo-fuzz target or a byte-slice property test feeds the parser. A panic is a failure. Unknown keys still error.
+
+Acceptance:
+
+- [ ] Target or proptest is in the repo.
+- [ ] The panic-on-garbage case is a fixture.
+
+## M56 — Fuzz the log reader
+
+### M56.1 Fuzz the log reader
+
+Labels: `verify`
+
+Depends on: M7.2, M32.1.
+
+Truncated and unknown-version logs exit non-zero and do not panic. A short property test covers both.
+
+Acceptance:
+
+- [ ] Reader tests exist.
+- [ ] A truncated golden log is a fixture.
+
+## M57 — Golden vector review
+
+### M57.1 Golden vector review
+
+Labels: `verify`
+
+Depends on: M7.3.
+
+Each fixture names the hazard and the expected verdict in the file, not only in the test. A review checklist is docs/golden-review.md.
+
+Acceptance:
+
+- [ ] Checklist exists.
+- [ ] Every fixture path is listed.
+
+## M58 — Verdict oracle
+
+### M58.1 Verdict oracle
+
+Labels: `verify`
+
+Depends on: M1.2, M4.2.
+
+One function in rta-spec is the oracle: inputs to expected verdict for the frozen thresholds. Replay and unit tests both call it. A second copy of the mapping is a defect.
+
+Acceptance:
+
+- [ ] Oracle is the only mapping in tests.
+- [ ] Host mapping test uses it.
+
+## M59 — Flaky test policy
+
+### M59.1 Flaky test policy
+
+Labels: `verify`
+
+Depends on: M9.1.
+
+A SITL test that depends on wall sleep is marked timing-sensitive and is not a merge blocker. Deterministic sink tests are the blocker.
+
+Acceptance:
+
+- [ ] Policy is in docs/tests.md.
+- [ ] No new sleep-only assertion is required in CI.
+
+## M60 — CI job map
+
+### M60.1 CI job map
+
+Labels: `repo`
+
+Depends on: M0.1.
+
+docs/ci.md names fmt, clippy, test, replay, deny, and the optional Kani job, and which ones block a merge.
+
+Acceptance:
+
+- [ ] Map matches the workflow files.
+- [ ] Kani is listed as non-blocking.
+
+## M61 — Required checks note
+
+### M61.1 Required checks note
+
+Labels: `repo`
+
+Depends on: M60.1.
+
+docs/ci.md says which checks should be required on main. The repository setting is recorded as a gap if this task cannot change it.
+
+Acceptance:
+
+- [ ] The intended required set is written.
+- [ ] A gap is explicit if branch protection is untouched.
+
+## M62 — Artifact retention
+
+### M62.1 Artifact retention
+
+Labels: `repo`
+
+Depends on: M26.1, M10.1.
+
+Coverage and target-measurement artifacts have a retention note. A release points at the artifact name, not a disappeared log.
+
+Acceptance:
+
+- [ ] docs/ci.md has the retention row.
+- [ ] M37 checklist links it.
+
+## M63 — Build provenance
+
+### M63.1 Build provenance
+
+Labels: `assurance`
+
+Depends on: M24.1.
+
+The configuration index gains the commit SHA and the CI run URL for the tagged build. A tag with no run URL is a gap row.
+
+Acceptance:
+
+- [ ] Index fields are named.
+- [ ] Example row is in docs/do178/sci.md.
+
+## M64 — Dependency update policy
+
+### M64.1 Dependency update policy
+
+Labels: `repo`
+
+Depends on: M0.2.
+
+A dependency bump is its own change, with the deny output and a note if the interpreter version moves. Spec behavior is re-replayed when the interpreter moves.
+
+Acceptance:
+
+- [ ] Policy is in docs/dependencies.md.
+- [ ] Interpreter bump names a replay run.
+
+## M65 — Advisory response
+
+### M65.1 Advisory response
+
+Labels: `repo`
+
+Depends on: M0.2, M48.1.
+
+A cargo deny advisory fails the advisory job or gets a waiver row with an expiry. No silent ignore.
+
+Acceptance:
+
+- [ ] Job behavior is written.
+- [ ] Waiver file is the only escape.
+
+## M66 — Fork and patch policy
+
+### M66.1 Fork and patch policy
+
+Labels: `repo`
+
+Depends on: M38.1.
+
+A patched crate is vendored with a reason, an upstream link, and a removal condition. No silent fork.
+
+Acceptance:
+
+- [ ] docs/third-party.md has the rule.
+- [ ] No vendored crate exists without a row.
+
+## M67 — Secret scanning note
+
+### M67.1 Secret scanning note
+
+Labels: `repo`
+
+Depends on: M0.3.
+
+Config examples contain no live endpoints that are secrets. docs/ci.md says secret scanning should be on, and records the gap if it is not.
+
+Acceptance:
+
+- [ ] Example config has no credential.
+- [ ] The note exists.
+
+## M68 — Branch protection note
+
+### M68.1 Branch protection note
+
+Labels: `repo`
+
+Depends on: M61.1.
+
+docs/ci.md records whether main rejects a direct push. If it does not, that is a gap, not a feature.
+
+Acceptance:
+
+- [ ] The current state is written.
+- [ ] The intended state is written beside it.
+
+## M69 — Release branch rule
+
+### M69.1 Release branch rule
+
+Labels: `repo`
+
+Depends on: M37.1.
+
+A release tag is cut from main at a green commit. A tag from a dirty tree is refused by the checklist. Hot-reload bundles are not release artifacts.
+
+Acceptance:
+
+- [ ] Rule is in docs/release.md.
+- [ ] Bundle files are excluded.
+
+## M70 — Log rotation
+
+### M70.1 Log rotation
+
+Labels: `replay`
+
+Depends on: M7.1.
+
+The log rolls at a config byte limit. A roll failure latches Revert, same as a write failure. The header is repeated on the new file.
+
+Acceptance:
+
+- [ ] Config key is named.
+- [ ] Roll-failure test latches Revert.
+
+## M71 — Log integrity hash
+
+### M71.1 Log integrity hash
+
+Labels: `replay`
+
+Depends on: M7.1, M32.1.
+
+Each flush writes a hash of the chunk. Replay reports a mismatch and exits non-zero. A mismatch does not repair the file.
+
+Acceptance:
+
+- [ ] Hash field is in the format doc.
+- [ ] Tamper fixture fails replay.
+
+## M72 — Clock drift bound
+
+### M72.1 Clock drift bound
+
+Labels: `host`
+
+Depends on: M23.1.
+
+The monotonic clock is compared to a second read across the tick. A backward step inside the process latches Revert.
+
+Acceptance:
+
+- [ ] Test injects a backward monotonic read.
+- [ ] The latch has no clear method.
+
+## M73 — Tick overrun histogram
+
+### M73.1 Tick overrun histogram
+
+Labels: `host`
+
+Depends on: M4.3, M7.1.
+
+The log records eval duration already. A summary counter of over-deadline ticks is in the trailer. The target note reads it.
+
+Acceptance:
+
+- [ ] Trailer field is documented.
+- [ ] A late fake tick increments it.
+
+## M74 — Deadline miss counter
+
+### M74.1 Deadline miss counter
+
+Labels: `host`
+
+Depends on: M73.1 if present else M4.3.
+
+The counter is exposed in the indication stream as a number, not a pass. An increase does not clear a Revert.
+
+Acceptance:
+
+- [ ] Indication name is in docs/hmi.md.
+- [ ] Test covers one miss.
+
+## M75 — Heartbeat miss counter
+
+### M75.1 Heartbeat miss counter
+
+Labels: `io`
+
+Depends on: M6.1.
+
+Missed flight-controller heartbeats increment a counter in the log. The spec still owns the revert decision.
+
+Acceptance:
+
+- [ ] Counter is a log field.
+- [ ] Spec threshold is unchanged.
+
+## M76 — Grant use counter
+
+### M76.1 Grant use counter
+
+Labels: `authority`
+
+Depends on: M14.1.
+
+Each tick a grant allows commit, a counter increments. Withdraw resets nothing; it only inhibits. The counter is a log field.
+
+Acceptance:
+
+- [ ] Field is documented.
+- [ ] Withdraw test does not zero the counter by itself.
+
+## M77 — Shadow takeover counter
+
+### M77.1 Shadow takeover counter
+
+Labels: `host`
+
+Depends on: M12.1.
+
+shadow_takeover increments a counter. The counter is not a health bit the spec trusts.
+
+Acceptance:
+
+- [ ] Log field exists in the format doc.
+- [ ] A takeover fixture increments it.
+
+## M78 — Filter intervention counter
+
+### M78.1 Filter intervention counter
+
+Labels: `cbf`
+
+Depends on: M11.2.
+
+filter_intervened increments a counter. Repeated intervention is a review item in the runbook, not an automatic pass.
+
+Acceptance:
+
+- [ ] Runbook sentence exists.
+- [ ] Counter is in the tick log.
+
+## M79 — Reload refusal counter
+
+### M79.1 Reload refusal counter
+
+Labels: `spec`
+
+Depends on: M13.2.
+
+A refused bundle increments a counter and keeps the old spec. The counter is logged.
+
+Acceptance:
+
+- [ ] Refusal fixture increments it.
+- [ ] Active spec hash is unchanged.
+
+## M80 — Memory budget
+
+### M80.1 Memory budget
+
+Labels: `host`
+
+Depends on: M12.2, M10.1.
+
+A resident-set note for the host on the named board is written next to the power note. A growth across the 10-minute run is recorded, not explained away.
+
+Acceptance:
+
+- [ ] docs/target.md has the row.
+- [ ] The run length matches M10.
+
+## M81 — Hot-path allocation
+
+### M81.1 Hot-path allocation
+
+Labels: `host`
+
+Depends on: M4.2.
+
+The tick path documents where it allocates. A new allocation in decide is a review failure. decide stays allocation-free.
+
+Acceptance:
+
+- [ ] Note is in the switch crate docs.
+- [ ] Review rule is in docs/constraints.md.
+
+## M82 — Stack bound note
+
+### M82.1 Stack bound note
+
+Labels: `host`
+
+Depends on: M81.1.
+
+The interpreter and the filter name their stack use as unknown until measured. Unknown is a gap row, not a zero.
+
+Acceptance:
+
+- [ ] Gap row exists.
+- [ ] No invented byte count.
+
+## M83 — File descriptor bound
+
+### M83.1 File descriptor bound
+
+Labels: `io`
+
+Depends on: M6.1, M7.1.
+
+The host holds the link socket and the log file. A leak test opens and closes a short run and checks the count.
+
+Acceptance:
+
+- [ ] Test exists or the gap is written.
+- [ ] Expected fds are listed.
+
+## M84 — Socket reconnect
+
+### M84.1 Socket reconnect
+
+Labels: `io`
+
+Depends on: M6.1, M5.3.
+
+A dropped socket latches Revert and retries the mode command. Reconnect does not clear the latch.
+
+Acceptance:
+
+- [ ] Retry is documented.
+- [ ] Clear-on-reconnect test fails if someone adds it.
+
+## M85 — Partial write handling
+
+### M85.1 Partial write handling
+
+Labels: `io`
+
+Depends on: M6.4.
+
+A short write is a write failure. It latches Revert. It does not retry the setpoint half.
+
+Acceptance:
+
+- [ ] Test uses a short-write sink.
+- [ ] No setpoint follows the short write.
+
+## M86 — Tracker backpressure
+
+### M86.1 Tracker backpressure
+
+Labels: `tracker`
+
+Depends on: M15.1.
+
+The appsink is leaky. A slow detector drops frames and ages the sample. It does not block the host tick.
+
+Acceptance:
+
+- [ ] Pipeline note says leaky.
+- [ ] Host tick test does not wait on a frame.
+
+## M87 — Queue bound
+
+### M87.1 Queue bound
+
+Labels: `host`
+
+Depends on: M86.1.
+
+Inbound messages are bounded. Overflow drops the oldest and ages the input. Overflow is a log field.
+
+Acceptance:
+
+- [ ] Bound is config.
+- [ ] Overflow fixture ages the fix.
+
+## M88 — Drop policy
+
+### M88.1 Drop policy
+
+Labels: `host`
+
+Depends on: M87.1.
+
+Drop oldest, never drop the revert decision. A full queue cannot erase a pending Revert.
+
+Acceptance:
+
+- [ ] Policy is in docs/startup.md.
+- [ ] Test fills the queue and still reverts.
+
+## M89 — Overload degrade
+
+### M89.1 Overload degrade
+
+Labels: `host`
+
+Depends on: M31.1, M4.3.
+
+Over deadline, the degrade row is Revert, not a quieter Pass. The matrix already says so. This task adds the overload row by name.
+
+Acceptance:
+
+- [ ] Matrix has an overload row.
+- [ ] Commit is not allowed on that row.
+
+## M90 — Config schema version
+
+### M90.1 Config schema version
+
+Labels: `repo`
+
+Depends on: M0.3.
+
+The TOML has a schema version. An unknown version refuses to start.
+
+Acceptance:
+
+- [ ] Parser test covers a future version.
+- [ ] Example config carries the version.
+
+## M91 — Unknown field policy
+
+### M91.1 Unknown field policy
+
+Labels: `repo`
+
+Depends on: M0.3.
+
+Unknown keys error. A test adds one and expects Err.
+
+Acceptance:
+
+- [ ] Test exists.
+- [ ] Deny-unknown is the serde setting.
+
+## M92 — Config range checks
+
+### M92.1 Config range checks
+
+Labels: `repo`
+
+Depends on: M0.3, M1.3.
+
+period_ms, deadline_ms, and watchdog_misses have upper bounds as well as the existing lower bounds. A zero period is an error.
+
+Acceptance:
+
+- [ ] Bounds are in the parser.
+- [ ] Zero and huge values fail.
+
+## M93 — Default refusal
+
+### M93.1 Default refusal
+
+Labels: `repo`
+
+Depends on: M0.3.
+
+Missing recovery mode is an error. There is no RTL default in code.
+
+Acceptance:
+
+- [ ] Test omits the key.
+- [ ] Switch still receives the mode from config.
+
+## M94 — Example config review
+
+### M94.1 Example config review
+
+Labels: `repo`
+
+Depends on: M0.3, M29.1.
+
+The example is the reviewed parameter item. A comment at the top says it is not a flight file.
+
+Acceptance:
+
+- [ ] Comment exists.
+- [ ] Index hashes this file.
+
+## M95 — Flight config diff
+
+### M95.1 Flight config diff
+
+Labels: `repo`
+
+Depends on: M94.1.
+
+A flight file is a named path with its own hash. The diff against example is an open item until a flight file exists.
+
+Acceptance:
+
+- [ ] Rule is in the index doc.
+- [ ] No flight file is invented.
+
+## M96 — Fence polygon validation
+
+### M96.1 Fence polygon validation
+
+Labels: `spec`
+
+Depends on: M2.3.
+
+A polygon with fewer than three points, or a self-intersection the checker can see, is fence_ok false.
+
+Acceptance:
+
+- [ ] Two bad polygons are fixtures.
+- [ ] Empty polygon remains fail closed.
+
+## M97 — Rally point validation
+
+### M97.1 Rally point validation
+
+Labels: `spec`
+
+Depends on: M2.3, M96.1.
+
+The rally point is inside the trip line, not on it. An outside rally refuses startup.
+
+Acceptance:
+
+- [ ] Parser check exists.
+- [ ] Startup failure does not open a socket.
+
+## M98 — Recovery mode validation
+
+### M98.1 Recovery mode validation
+
+Labels: `repo`
+
+Depends on: M1.2.
+
+The enum is rtl, loiter, land. Any other string fails config load.
+
+Acceptance:
+
+- [ ] Three bad strings are tests.
+- [ ] The switch has no fourth mode.
+
+## M99 — System id collision check
+
+### M99.1 System id collision check
+
+Labels: `io`
+
+Depends on: M6.1.
+
+If the first heartbeat seen uses this component's system id and component id, startup fails. The companion does not talk over the flight controller.
+
+Acceptance:
+
+- [ ] Test feeds a colliding heartbeat.
+- [ ] Failure happens before setpoints.
+
+## M100 — Spec stream inventory
+
+### M100.1 Spec stream inventory
+
+Labels: `spec`
+
+Depends on: M3.2.
+
+docs/spec-notes.md lists every output stream. A stream in the file and not in the notes fails the spec gate.
+
+Acceptance:
+
+- [ ] Inventory matches monitor.lola.
+- [ ] Host-required names are marked.
+
+## M101 — Unused stream check
+
+### M101.1 Unused stream check
+
+Labels: `spec`
+
+Depends on: M100.1 if present else M3.1.
+
+An output stream the host does not read is allowed only if the notes say why. Silent streams fail review.
+
+Acceptance:
+
+- [ ] Rule is in the spec notes.
+- [ ] revert and inhibit are marked read.
+
+## M102 — Trigger code stability
+
+### M102.1 Trigger code stability
+
+Labels: `spec`
+
+Depends on: M3.2, M14.2.
+
+Reason codes are an enum in rta-spec. A new code is a version bump for the log.
+
+Acceptance:
+
+- [ ] Enum is the source.
+- [ ] Log format names the version.
+
+## M103 — Threshold change diff
+
+### M103.1 Threshold change diff
+
+Labels: `spec`
+
+Depends on: M3.2, M36.1.
+
+A threshold literal change in the spec requires a fixture update and a notes update. CI checks both.
+
+Acceptance:
+
+- [ ] Rule is beside the spec gate.
+- [ ] A lone threshold edit fails.
+
+## M104 — Spec vector file
+
+### M104.1 Spec vector file
+
+Labels: `spec`
+
+Depends on: M7.3, M58.1.
+
+Vectors live in spec/vectors.json. The oracle and the fixtures share them.
+
+Acceptance:
+
+- [ ] One vector file.
+- [ ] Replay reads it.
+
+## M105 — Spec eval budget
+
+### M105.1 Spec eval budget
+
+Labels: `spec`
+
+Depends on: M4.3, M3.2.
+
+Spec eval has its own budget inside the deadline, start at 2 ms. Over budget is Revert even if the result is pass.
+
+Acceptance:
+
+- [ ] Budget is config.
+- [ ] Slow-spec test reverts.
+
+## M106 — Interpreter pin review
+
+### M106.1 Interpreter pin review
+
+Labels: `repo`
+
+Depends on: M0.2, M64.1.
+
+The pin is reviewed when it changes. The review note is the replay result.
+
+Acceptance:
+
+- [ ] dependencies.md says so.
+- [ ] No floating interpreter requirement.
+
+## M107 — Spec comment rule
+
+### M107.1 Spec comment rule
+
+Labels: `spec`
+
+Depends on: M3.3.
+
+A threshold without a comment naming the hazard id fails review. The check can be a lint script or a checklist row.
+
+Acceptance:
+
+- [ ] Rule is in spec-notes.
+- [ ] Existing thresholds are commented.
+
+## M108 — Reason code registry
+
+### M108.1 Reason code registry
+
+Labels: `spec`
+
+Depends on: M102.1 if present else M3.2.
+
+docs/reason-codes.md is the registry. Indication, log, and spec use the same strings.
+
+Acceptance:
+
+- [ ] One table.
+- [ ] HMI doc links it.
+
+## M109 — Verdict mapping review
+
+### M109.1 Verdict mapping review
+
+Labels: `spec`
+
+Depends on: M1.2, M58.1 if present else M1.2.
+
+The mapping table is reviewed when the enum changes. Pass, Inhibit, Revert stay the only variants.
+
+Acceptance:
+
+- [ ] Review line is in verdicts.md.
+- [ ] No fourth variant in the crate.
+
+## M110 — Dialect pin
+
+### M110.1 Dialect pin
+
+Labels: `io`
+
+Depends on: M0.2, M22.1.
+
+The dialect choice is repeated in the ICD and the dependency note. A mismatch fails review.
+
+Acceptance:
+
+- [ ] Both docs name the same dialect.
+- [ ] Adapter uses that dialect only.
+
+## M111 — Message rate limit
+
+### M111.1 Message rate limit
+
+Labels: `io`
+
+Depends on: M6.1.
+
+Outbound heartbeats stay at 1 Hz. Setpoints stay at the tick rate. A faster loop is a defect.
+
+Acceptance:
+
+- [ ] Rates are in the ICD.
+- [ ] A test counts outbound heartbeats.
+
+## M112 — Unsupported message drop
+
+### M112.1 Unsupported message drop
+
+Labels: `io`
+
+Depends on: M6.2.
+
+Unknown inbound messages are counted and dropped. They do not change state.
+
+Acceptance:
+
+- [ ] Counter is a log field.
+- [ ] Garbage message test leaves ages unchanged.
+
+## M113 — Command ack handling
+
+### M113.1 Command ack handling
+
+Labels: `io`
+
+Depends on: M6.4.
+
+A mode command waits for an ack until the watchdog bound. No ack is a repeated mode command, not a setpoint.
+
+Acceptance:
+
+- [ ] ICD names the ack.
+- [ ] No-ack test sends mode only.
+
+## M114 — Mode ack timeout
+
+### M114.1 Mode ack timeout
+
+Labels: `io`
+
+Depends on: M113.1.
+
+Timeout does not clear Revert and does not resume setpoints.
+
+Acceptance:
+
+- [ ] Test covers timeout.
+- [ ] Setpoint count stays zero.
+
+## M115 — Setpoint silence on revert
+
+### M115.1 Setpoint silence on revert
+
+Labels: `io`
+
+Depends on: M6.4, M5.2.
+
+A revert tick emits no setpoint bytes. The sink test counts bytes, not just the enum.
+
+Acceptance:
+
+- [ ] Byte count assertion exists.
+- [ ] Inhibit may still emit navigation bytes.
+
+## M116 — Heartbeat component id
+
+### M116.1 Heartbeat component id
+
+Labels: `io`
+
+Depends on: M6.1.
+
+Outbound heartbeat uses the configured component id. A test locks the value.
+
+Acceptance:
+
+- [ ] Test exists.
+- [ ] Config is the only source.
+
+## M117 — Link loss versus heartbeat loss
+
+### M117.1 Link loss versus heartbeat loss
+
+Labels: `io`
+
+Depends on: M6.2.
+
+The two ages are separate fields and separate reason codes. A test fails one without failing the other.
+
+Acceptance:
+
+- [ ] Two fixtures.
+- [ ] Reason codes differ.
+
+## M118 — Captured link replay
+
+### M118.1 Captured link replay
+
+Labels: `io`
+
+Depends on: M7.2, M6.2.
+
+A captured MAVLink file can rebuild input records for replay. The tool is rta-replay or a sibling. It does not transmit.
+
+Acceptance:
+
+- [ ] Tool refuses a send flag.
+- [ ] A short capture is a fixture.
+
+## M119 — Dialect mismatch startup
+
+### M119.1 Dialect mismatch startup
+
+Labels: `io`
+
+Depends on: M110.1.
+
+A peer dialect marker the adapter does not understand refuses startup. It does not guess.
+
+Acceptance:
+
+- [ ] Test feeds a mismatch.
+- [ ] No setpoint is sent.
+
+## M120 — Tracker sample clock
+
+### M120.1 Tracker sample clock
+
+Labels: `tracker`
+
+Depends on: M15.2, M23.1.
+
+Sample time is the monotonic host time at receive, not the frame timestamp. A frame clock step does not shrink tracker age.
+
+Acceptance:
+
+- [ ] Note is in the tracker crate.
+- [ ] Test steps the frame clock back.
+
+## M121 — Single-track rule
+
+### M121.1 Single-track rule
+
+Labels: `tracker`
+
+Depends on: M15.2, M35.1.
+
+Two detections become a miss, not a pick. The port emits confidence 0.
+
+Acceptance:
+
+- [ ] Fixture covers two tracks.
+- [ ] Switch never sees a pair.
+
+## M122 — Confidence range check
+
+### M122.1 Confidence range check
+
+Labels: `tracker`
+
+Depends on: M2.1, M15.2.
+
+Out-of-range confidence is a miss. The record constructor already rejects it. The tracker must not send it.
+
+Acceptance:
+
+- [ ] Tracker test clamps to a miss.
+- [ ] Constructor test still rejects 1.1.
+
+## M123 — Range non-negative check
+
+### M123.1 Range non-negative check
+
+Labels: `tracker`
+
+Depends on: M15.2.
+
+A negative range is a miss. The stub focal-length range is labeled a stub in the log.
+
+Acceptance:
+
+- [ ] Test covers a negative.
+- [ ] Stub label is in the format doc.
+
+## M124 — Hold-limit review
+
+### M124.1 Hold-limit review
+
+Labels: `tracker`
+
+Depends on: M2.2, M15.3.
+
+The hold limit changes only in a change that also updates the timing doc and a fixture.
+
+Acceptance:
+
+- [ ] Gate is written next to the spec gate.
+- [ ] A lone hold-limit edit fails review.
+
+## M125 — Detector timeout
+
+### M125.1 Detector timeout
+
+Labels: `tracker`
+
+Depends on: M15.2, M4.3.
+
+Detector time is inside the tracker, not the host deadline. A slow detector ages the sample. It does not stall the tick.
+
+Acceptance:
+
+- [ ] Timeout path exists.
+- [ ] Host deadline test does not call the detector.
+
+## M126 — Pipeline restart bound
+
+### M126.1 Pipeline restart bound
+
+Labels: `tracker`
+
+Depends on: M15.1.
+
+A dead pipeline restarts at most once per config interval. Further death is a missed sample.
+
+Acceptance:
+
+- [ ] Bound is config.
+- [ ] Restart storm test stops restarting.
+
+## M127 — Frame drop metric
+
+### M127.1 Frame drop metric
+
+Labels: `tracker`
+
+Depends on: M86.1.
+
+Dropped frames increment a counter in the tracker log. The host log stores the last count, not the frames.
+
+Acceptance:
+
+- [ ] Metric name is documented.
+- [ ] No frame bytes in the host log.
+
+## M128 — No frame in the host log
+
+### M128.1 No frame in the host log
+
+Labels: `tracker`
+
+Depends on: M7.1, M15.2.
+
+The tick log schema has no image field. A review check fails if one is added without a version bump and an explicit out-of-scope reversal.
+
+Acceptance:
+
+- [ ] Schema doc says so.
+- [ ] Format version is unchanged by this task.
+
+## M129 — Tracker dependency fence
+
+### M129.1 Tracker dependency fence
+
+Labels: `tracker`
+
+Depends on: M15.1, M5.1.
+
+cargo tree on rta-switch has no gstreamer. CI runs that check.
+
+Acceptance:
+
+- [ ] Job or script exists.
+- [ ] Failure output names the crate.
+
+## M130 — Packet index review
+
+### M130.1 Packet index review
+
+Labels: `assurance`
+
+Depends on: M16.3.
+
+The packet index is reviewed when a gap file changes. The checklist is a line in the release doc.
+
+Acceptance:
+
+- [ ] Release doc links the index.
+- [ ] A stale link is a review fail.
+
+## M131 — Gap review note
+
+### M131.1 Gap review note
+
+Labels: `assurance`
+
+Depends on: M47.1.
+
+Open items are copied into the packet at release, not summarized away. The release checklist says copy, not close.
+
+Acceptance:
+
+- [ ] Checklist verb is copy.
+- [ ] Open-item file is the source.
+
+## M132 — Known-problem list
+
+### M132.1 Known-problem list
+
+Labels: `assurance`
+
+Depends on: M39.1.
+
+docs/known-problems.md repeats residual risks in operator language. It links the hazard ids.
+
+Acceptance:
+
+- [ ] File exists.
+- [ ] Runbook links it.
+
+## M133 — Residual risk owner column
+
+### M133.1 Residual risk owner column
+
+Labels: `assurance`
+
+Depends on: M39.1.
+
+The owner column stays blank or says unassigned. This repository does not fill in a name as if the risk were accepted.
+
+Acceptance:
+
+- [ ] Column exists.
+- [ ] No personal name is invented.
+
+## M134 — Non-claim sentence check
+
+### M134.1 Non-claim sentence check
+
+Labels: `docs`
+
+Depends on: M10.3, M16.3.
+
+A checklist confirms the non-claim sentences are still in the packet and the assurance-gap note. A release fails review if they are gone.
+
+Acceptance:
+
+- [ ] Checklist row exists.
+- [ ] Sentences are quoted in the checklist.
+
+## M135 — Public-document citation check
+
+### M135.1 Public-document citation check
+
+Labels: `docs`
+
+Depends on: M16.1, M14.3.
+
+Citations name ASTM F3269-21, DO-178C, DO-333, and DoDD 3000.09 with dates. A citation without a date is a review fail.
+
+Acceptance:
+
+- [ ] Citation list is in docs/references.md.
+- [ ] No certification claim uses those names.
+
+## M136 — Out-of-scope sentence check
+
+### M136.1 Out-of-scope sentence check
+
+Labels: `docs`
+
+Depends on: M14.3.
+
+The out-of-scope list still names arming circuits, fuzes, safe-and-arm devices, and release actuators. A release review confirms the sentences.
+
+Acceptance:
+
+- [ ] Checklist row exists.
+- [ ] Task file still ends with that list.
+
+## M137 — Issue-to-heading check
+
+### M137.1 Issue-to-heading check
+
+Labels: `repo`
+
+Depends on: M0.1.
+
+A script lists ### headings and can be compared to open issues. It does not have to call GitHub. The output is docs/heading-index.md generated in CI or checked in.
+
+Acceptance:
+
+- [ ] Index exists.
+- [ ] M40 through M139 appear.
+
+## M138 — Milestone title check
+
+### M138.1 Milestone title check
+
+Labels: `repo`
+
+Depends on: M137.1.
+
+GitHub milestone titles for M20 through M39 match the heading text. Later milestones are headings in this file even if a GitHub milestone object does not exist yet.
+
+Acceptance:
+
+- [ ] Note is in docs/milestone-list.md.
+- [ ] Heading text is the source.
+
+## M139 — Task file table of contents
+
+### M139.1 Task file table of contents
+
+Labels: `repo`
+
+Depends on: M137.1.
+
+The top of docs/engineering-tasks.md links every milestone heading from M0 through M139. A missing heading fails the index script.
+
+Acceptance:
+
+- [ ] Contents list exists.
+- [ ] M40-M139 are on it.
+
 ## Still out of scope
+
 
 
 
