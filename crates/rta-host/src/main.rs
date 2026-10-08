@@ -2,6 +2,7 @@
 //! Config load failure exits before a socket type is constructed.
 
 mod config;
+mod eval;
 mod event;
 mod fence;
 mod link;
@@ -59,7 +60,7 @@ fn main() -> ExitCode {
         eprintln!("spec: {err}");
         return ExitCode::from(1);
     }
-    let built = match monitor::build_once(&spec_text) {
+    let mut built = match monitor::build_once(&spec_text) {
         Ok(built) => built,
         Err(err) => {
             eprintln!("spec: {err:?}");
@@ -110,6 +111,10 @@ fn main() -> ExitCode {
     let mut link_age = link_age::LinkAge::new();
     link_age.observe(link_age::LinkMessage::StatusText, 0);
     let _age = link_age.age_ms(0);
+    let mut evaluator = eval::Evaluator::default();
+    let _tick = evaluator.tick(&mut built, &record, 0);
+    let _converted = eval::monotonic_to_interpreter(config.tick.period_ms);
+    let _faulted = evaluator.faulted();
     println!("rta-host: config accepted, stub bind {bound:?}");
     ExitCode::SUCCESS
 }
