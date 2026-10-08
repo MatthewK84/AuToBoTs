@@ -88,6 +88,15 @@ pub const INPUT_RECORD_VERSION: u32 = 1;
 
 pub const REQUIRED_OUTPUTS: &[&str] = &["revert", "inhibit"];
 
+pub const SPEC_INPUT_ORDER: &[&str] = &[
+    "fence_ok",
+    "fix_age_ms",
+    "link_age_ms",
+    "fc_heartbeat_age_ms",
+    "track_conf",
+    "range_m",
+];
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InputRecord {
@@ -143,6 +152,25 @@ impl InputRecord {
 
     pub fn version(&self) -> u32 {
         self.version
+    }
+
+    pub fn fence_ok(&self) -> bool {
+        self.fence_ok
+    }
+    pub fn fix_age_ms(&self) -> f64 {
+        self.fix_age_ms
+    }
+    pub fn link_age_ms(&self) -> f64 {
+        self.link_age_ms
+    }
+    pub fn fc_heartbeat_age_ms(&self) -> f64 {
+        self.fc_heartbeat_age_ms
+    }
+    pub fn track_conf(&self) -> f64 {
+        self.track_conf
+    }
+    pub fn range_m(&self) -> f64 {
+        self.range_m
     }
 }
 

@@ -2,6 +2,7 @@
 //! Config load failure exits before a socket type is constructed.
 
 mod config;
+mod event;
 mod fence;
 mod monitor;
 mod spec;
@@ -62,6 +63,10 @@ fn main() -> ExitCode {
     };
     let _monitor = built.borrow_monitor();
     let _builds = monitor::build_count();
+    let record =
+        rta_spec::InputRecord::try_new(0.0, false, 0.0, 0.0, 0.0, 0.0, 0.0).expect("record");
+    let _event = event::event(&record);
+    let _order = event::spec_input_order(&spec_text);
     println!("rta-host: config accepted, no link opened");
     ExitCode::SUCCESS
 }
