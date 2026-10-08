@@ -8,6 +8,7 @@ period_ms = 50
 deadline_ms = 5
 watchdog_misses = 3
 mode_change_latency_ms = 200
+tracker_hold_ms = 200
 
 [recovery]
 mode = "rtl"
