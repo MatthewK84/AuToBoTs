@@ -30,6 +30,7 @@ pub struct Tick {
     pub deadline_ms: u64,
     pub watchdog_misses: u32,
     pub mode_change_latency_ms: u64,
+    pub tracker_hold_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
