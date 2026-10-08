@@ -2996,7 +2996,205 @@ Acceptance:
 - [ ] Contents list exists.
 - [ ] M40-M139 are on it.
 
+
+## M140 — Autonomy gaps
+
+Nine issues for the gaps that bite before the paperwork tail. Same fail-closed rules. A new fault maps to Inhibit or Revert, never to a quieter Pass.
+
+### M140.1 Pilot override beats the companion
+
+Labels: `switch`
+
+Depends on: M5.2, M6.4, M22.1.
+
+A stick deflection, a flight-controller mode change off guided or offboard, or a configured RC takeover beats the companion in the same tick. The switch latches Inhibit until the pilot returns the aircraft to the guided mode and a config flag says the companion may resume. Revert still wins over that latch.
+
+Work:
+
+1. Read the flight controller's reported mode and RC override bit every tick.
+2. On override, emit no setpoints and no commit. Do not fight the mode change with a recovery command unless the override is lost and the spec already says Revert.
+3. Latch `pilot_hold` until the resume condition. No public clear other than that condition.
+4. Reason code `pilot_override`.
+
+Acceptance:
+
+- [ ] A mode change off guided in a sink test suppresses setpoints in that same tick.
+- [ ] The following tick stays inhibited without a resume.
+- [ ] A Revert hazard during pilot hold still commands recovery only if the pilot has released the sticks. Document that rule in docs/verdicts.md.
+
+### M140.2 Energy to rally
+
+Labels: `spec`
+
+Depends on: M2.1, M3.2, M97.1.
+
+Fix age and a fence do not know if the rally is still reachable. Add `time_to_rally_s` and `endurance_s` to the input record. The spec trips `revert` while endurance still exceeds time-to-rally plus the margin in config. Tripping after the rally is unreachable is a failed test.
+
+Work:
+
+1. Endurance comes from the flight controller's battery or fuel estimate, aged like any other sample. Missing endurance is zero, which reverts.
+2. Time-to-rally is distance to the validated rally divided by a config cruise speed, plus the mode-change latency assumption.
+3. Threshold lives in the spec. Host only publishes the two numbers.
+4. Reason code `energy`.
+
+Acceptance:
+
+- [ ] Fixture: endurance one second above the margin passes, one second below reverts.
+- [ ] Missing battery sample reverts.
+- [ ] The trip happens while the rally is still inside endurance.
+
+### M140.3 Estimator health gate
+
+Labels: `spec`
+
+Depends on: M2.1, M3.2, M27.1.
+
+Age is not health. Add `estimator_ok` from the flight controller's fail flag or innovation gate. A fresh position with `estimator_ok` false is `revert`. The fence, the barrier, and the shadow net all consume position, so this bit is the independent trip #66 asked for.
+
+Work:
+
+1. Map the dialect's estimator-unhealthy or innovation-fail field. If the dialect has no such field, startup fails closed rather than assuming healthy.
+2. Spec stream `estimator_bad`. It is part of `revert`.
+3. Reason code `estimator`.
+4. Update the common-mode note: the remaining hole is a healthy flag that is wrong, and that stays a residual.
+
+Acceptance:
+
+- [ ] Fresh fix, estimator flag false, verdict Revert.
+- [ ] Dialect with no flag refuses startup.
+- [ ] docs/common-mode.md names this stream as the control.
+
+### M140.4 Mission phase
+
+Labels: `switch`
+
+Depends on: M5.1, M14.1.
+
+The complex function submits a phase with the setpoint: `search`, `track`, `commit`, `abort`. The monitor can see it. Commit is legal only in phase `commit`, with verdict Pass, a grant, and no inhibit stream. A setpoint that wanders into range during `search` or `track` cannot set the commit flag.
+
+Work:
+
+1. Extend the request trait with phase.
+2. An unknown or missing phase is `search`.
+3. Spec input `phase_commit`. Inhibit if commit is requested and phase is not commit.
+4. Reason code `phase`.
+
+Acceptance:
+
+- [ ] Search phase inside commit range does not emit commit.
+- [ ] Commit phase with a failed grant does not emit commit.
+- [ ] Abort phase clears a pending commit request in the same tick.
+
+### M140.5 Abort a commit already sent
+
+Labels: `authority`
+
+Depends on: M14.2, M33.1, M140.4.
+
+Withdraw inhibits the next tick. That does not cancel a commit the flight controller already accepted. Add an abort command the adapter can send on withdraw, phase abort, or Revert. DoDD 3000.09 terminate-the-engagement is this command, not a hope that the next setpoint is quieter.
+
+This is a mode or mission-item cancel on the existing link. It is not an arming circuit, a fuze, or a release actuator.
+
+Work:
+
+1. On withdraw, phase abort, or Revert, send the dialect's abort or mission-cancel if one exists. If none exists, the ICD says so and the residual is written in docs/authority.md.
+2. Log `abort_sent` separately from inhibit.
+3. An abort that is not acked retries until the watchdog bound, and does not resume commit.
+
+Acceptance:
+
+- [ ] Withdraw after a commit tick produces an abort message in the sink.
+- [ ] No commit setpoint follows that abort.
+- [ ] A dialect with no abort message is an explicit residual, not a silent pass.
+
+### M140.6 Coast quality in denied navigation
+
+Labels: `spec`
+
+Depends on: M2.1, M3.2, M140.3.
+
+Position arriving as a message is not navigation. Add `nav_source` and `coast_ok`. Sources are gnss, visual, inertial. Inertial-only is not a commit source. `coast_ok` is false when the coast time exceeds a spec limit or the visual-odometry health bit is false.
+
+Work:
+
+1. Host publishes the source and the coast age. It does not decide.
+2. Spec: commit inhibit on inertial-only or coast not ok. Revert if coast is not ok and fix is also stale.
+3. Reason codes `coast`, `nav_source`.
+4. No visual-odometry implementation in this task. The port is the health bit. A missing bit is coast not ok.
+
+Acceptance:
+
+- [ ] Inertial-only with a valid grant does not commit.
+- [ ] Visual source with health false inhibits commit.
+- [ ] Missing nav source inhibits commit.
+
+### M140.7 Protected-entity inhibit
+
+Labels: `authority`
+
+Depends on: M14.1, M35.1, M121.1.
+
+A valid grant and a confident track are not sufficient. Add a no-strike list: ids or regions hashed into the grant. A track whose classification is unknown, a second detection in the same window, or a match on the no-strike list inhibits commit.
+
+Work:
+
+1. List is part of the signed grant. A list the host cannot parse inhibits.
+2. Two detections in one window set `multi_track`. That inhibits, matching the single-track miss but at the authority layer so a tracker bug cannot bypass it.
+3. Unknown classification inhibits. There is no default foe.
+4. Reason codes `no_strike`, `multi_track`, `unknown_class`.
+
+Acceptance:
+
+- [ ] Match on the list inhibits despite confidence 0.9 and a valid grant.
+- [ ] Two detections inhibit.
+- [ ] Unknown class inhibits.
+
+### M140.8 Airborne deconfliction
+
+Labels: `spec`
+
+Depends on: M2.3, M11.1, M140.4.
+
+Nothing in the existing issues looks at another aircraft. Add `traffic_ok`, true only when no cooperating track is inside a config cylinder. Loss of the traffic source sets `traffic_ok` false. Commit is inhibited. Revert if the intruder is inside the recovery cylinder.
+
+This is a keep-out around reported traffic, not a pursuit.
+
+Work:
+
+1. Source is a MAVLink traffic message or an empty source. Empty is not ok if config says traffic is required.
+2. Spec streams `traffic_inhibit` and `traffic_revert`.
+3. The barrier may consume the same cylinder as a constraint. It may not ignore a false `traffic_ok`.
+4. Reason code `traffic`.
+
+Acceptance:
+
+- [ ] Intruder inside the commit cylinder inhibits commit.
+- [ ] Intruder inside the recovery cylinder reverts.
+- [ ] Required source missing inhibits.
+
+### M140.9 Grant window versus monotonic time
+
+Labels: `authority`
+
+Depends on: M14.1, M23.1, M33.1.
+
+The tick clock is monotonic. The grant window is wall time. Own the conversion. At startup, record the offset between wall time and the monotonic clock. Expiry is computed from that offset. A wall-clock step does not extend a grant. A negative offset or a missing wall clock at startup refuses the grant path.
+
+Work:
+
+1. `grant_remaining_ms` is a host output, computed once per tick from the frozen offset.
+2. Spec inhibits when remaining is zero or negative.
+3. A wall step larger than a config bound latches grant inhibit for the process.
+4. Reason code `grant_time`.
+
+Acceptance:
+
+- [ ] Wall clock jumping forward does not lengthen the remaining time.
+- [ ] Wall clock jumping back does not revive an expired grant.
+- [ ] Missing wall clock at startup means no commit, and setpoints may still pass.
+
 ## Still out of scope
+
 
 
 
