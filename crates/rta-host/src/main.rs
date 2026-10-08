@@ -8,6 +8,7 @@ mod fail_closed;
 mod fence;
 mod link;
 mod link_age;
+mod mavlink_link;
 mod mode;
 mod monitor;
 mod read;
@@ -145,6 +146,13 @@ fn main() -> ExitCode {
         &mut modes,
         &mut dog_sink,
     );
+    if let Ok(mut mav) =
+        mavlink_link::MavLink::open(&endpoint, config.link.system_id, config.link.component_id)
+    {
+        let _beat = mav.send_heartbeat();
+        mav.note(&mavlink_link::classify(&mavlink_link::heartbeat()), 0);
+        let _age = mav.fc_heartbeat_age_ms(0);
+    }
     println!("rta-host: config accepted, stub bind {bound:?}");
     ExitCode::SUCCESS
 }
