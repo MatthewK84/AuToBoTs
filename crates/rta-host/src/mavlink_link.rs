@@ -86,6 +86,38 @@ pub fn heartbeat() -> MavMessage {
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct VehicleState {
+    pub alt_m: Option<f64>,
+    pub fix_received_ms: Option<u64>,
+    pub link_received_ms: Option<u64>,
+    pub fc_heartbeat_ms: Option<u64>,
+    pub status_log: Vec<String>,
+}
+
+pub fn apply(state: &mut VehicleState, inbound: &Inbound, now_ms: u64) {
+    match inbound {
+        Inbound::Heartbeat => {
+            state.fc_heartbeat_ms = Some(now_ms);
+            state.link_received_ms = Some(now_ms);
+        }
+        Inbound::Position { alt_mm } => {
+            state.alt_m = Some(*alt_mm as f64 / 1_000.0);
+            state.fix_received_ms = Some(now_ms);
+            state.link_received_ms = Some(now_ms);
+        }
+        Inbound::StatusText(text) => state.status_log.push(text.clone()),
+        Inbound::Other => state.link_received_ms = Some(now_ms),
+    }
+}
+
+pub fn age_ms(received: Option<u64>, now_ms: u64) -> f64 {
+    match received {
+        Some(last) => now_ms.saturating_sub(last) as f64,
+        None => f64::MAX,
+    }
+}
+
 pub fn classify(message: &MavMessage) -> Inbound {
     match message {
         MavMessage::HEARTBEAT(_) => Inbound::Heartbeat,
@@ -93,6 +125,7 @@ pub fn classify(message: &MavMessage) -> Inbound {
             alt_mm: position.alt,
         },
         MavMessage::STATUSTEXT(status) => Inbound::StatusText(format!("{:?}", status.text)),
+        MavMessage::SYS_STATUS(_) => Inbound::StatusText("sys_status".into()),
         _ => Inbound::Other,
     }
 }
@@ -142,6 +175,26 @@ mod tests {
         assert!(link.fc_heartbeat_age_ms(400) > 1_000.0);
         link.note(&Inbound::Heartbeat, 100);
         assert_eq!(link.fc_heartbeat_age_ms(500), 400.0);
+    }
+
+    #[test]
+    fn position_resets_fix_age() {
+        let mut state = VehicleState::default();
+        apply(&mut state, &Inbound::Position { alt_mm: 1_500 }, 40);
+        assert_eq!(state.alt_m, Some(1.5));
+        assert_eq!(age_ms(state.fix_received_ms, 40), 0.0);
+        apply(&mut state, &Inbound::StatusText("sys_status".into()), 80);
+        assert_eq!(state.alt_m, Some(1.5));
+        assert_eq!(state.fix_received_ms, Some(40));
+        assert!(age_ms(state.fc_heartbeat_ms, 80) > age_ms(state.link_received_ms, 80));
+    }
+
+    #[test]
+    fn spec_does_not_read_system_status() {
+        let spec = include_str!("../../../spec/monitor.lola");
+        let name = ["SYS", "_STATUS"].concat();
+        assert!(!spec.contains(&name));
+        assert!(!spec.contains("battery"));
     }
 
     #[test]
