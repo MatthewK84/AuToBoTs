@@ -1,4 +1,4 @@
-//! Input record and log schema. This crate does not command actuators.
+//! Input record and log schema. Forbidden: sockets, MAVLink, and the RTLola interpreter.
 
 use serde::{Deserialize, Serialize};
 
@@ -50,7 +50,7 @@ pub struct TickLog {
 const FORBIDDEN_LOG_FIELDS: &[&str] = &["grant_body", "signature", "frame", "image"];
 
 pub fn log_schema_rejects(field: &str) -> bool {
-    FORBIDDEN_LOG_FIELDS.iter().any(|name| *name == field)
+    FORBIDDEN_LOG_FIELDS.contains(&field)
 }
 
 #[cfg(test)]
