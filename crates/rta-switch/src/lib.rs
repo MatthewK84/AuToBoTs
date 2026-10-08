@@ -142,6 +142,61 @@ mod tests {
     }
 
     #[test]
+    fn pass_does_not_invent_commit() {
+        let request = Request {
+            north: 1.0,
+            east: 0.0,
+            down: 0.0,
+            yaw: 0.0,
+            commit: false,
+        };
+        match decide(Verdict::Pass, Some(request), rta_spec::RecoveryMode::Rtl) {
+            SwitchCommand::Setpoints { commit: false, .. } => {}
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn inhibit_clears_commit() {
+        let request = Request {
+            north: 1.0,
+            east: 0.0,
+            down: 0.0,
+            yaw: 0.0,
+            commit: true,
+        };
+        match decide(
+            Verdict::Inhibit,
+            Some(request),
+            rta_spec::RecoveryMode::Loiter,
+        ) {
+            SwitchCommand::Setpoints { commit: false, .. } => {}
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn revert_has_no_commit_field() {
+        match decide(
+            Verdict::Revert,
+            Some(Request {
+                north: 1.0,
+                east: 0.0,
+                down: 0.0,
+                yaw: 0.0,
+                commit: true,
+            }),
+            rta_spec::RecoveryMode::Land,
+        ) {
+            SwitchCommand::Mode {
+                recovery: rta_spec::RecoveryMode::Land,
+            } => {}
+            SwitchCommand::Mode { .. } => panic!("revert changed the configured mode"),
+            SwitchCommand::Setpoints { .. } => panic!("revert returned setpoints"),
+        }
+    }
+
+    #[test]
     fn six_verdict_rows() {
         let recovery = rta_spec::RecoveryMode::Rtl;
         let pending = Request {
