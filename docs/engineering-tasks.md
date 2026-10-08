@@ -3193,7 +3193,83 @@ Acceptance:
 - [ ] Wall clock jumping back does not revive an expired grant.
 - [ ] Missing wall clock at startup means no commit, and setpoints may still pass.
 
+
+## M141 — Standards evidence
+
+DoDD 3000.09 and DoWI 8430.01 binding is docs/standards-3000-09-8430-01.md. These issues are the evidence that instruction requires. They are not a compliance claim.
+
+### M141.1 SBOM for every crate
+
+Labels: `assurance`
+
+Depends on: M38.1, M0.2.
+
+DoWI 8430.01 section 3.5.b: an accurate SBOM is generated and maintained for covered software. Generate a CycloneDX or SPDX SBOM from Cargo.lock in CI and store it as a build artifact.
+
+Acceptance:
+
+- [ ] CI emits an SBOM for the workspace.
+- [ ] The SBOM names rtlola, mavlink, and any GStreamer binding actually linked.
+- [ ] A missing SBOM fails the evidence job, not the compile job.
+
+### M141.2 Build provenance record
+
+Labels: `assurance`
+
+Depends on: M24.1, M63.1.
+
+DoWI 8430.01 section 3.5.c: covered software is produced by a secure, automated, observable build, from trusted sources, protected from tampering. Write the commit SHA, lockfile hash, toolchain, and CI run URL into the configuration index for a tagged build.
+
+Acceptance:
+
+- [ ] A tag documents the four fields or is marked a gap.
+- [ ] The record is machine-readable, not only a paragraph.
+- [ ] No release note calls an untagged local build provenance.
+
+### M141.3 Continuous test evidence hook
+
+Labels: `verify`
+
+Depends on: M9.2, M34.1, M52.1.
+
+DoWI 8430.01 section 3.5.d asks for evidence of operational effectiveness, suitability, and survivability. This repository can produce developmental evidence only. The hook stores cargo test, replay, and SITL logs as named artifacts and labels them DT&E, not OT&E.
+
+Acceptance:
+
+- [ ] Artifact names are in docs/ci.md.
+- [ ] The SITL claim table is linked from the artifact note.
+- [ ] No artifact is labeled operational test.
+
+### M141.4 Log redaction
+
+Labels: `replay`
+
+Depends on: M7.1, M14.1.
+
+DoWI 8430.01 section 3.5.f: logging must not leak sensitive information. The tick log stores reason codes, ages, verdicts, and grant hashes. It does not store the grant signature payload, pilot identity, or a frame.
+
+Acceptance:
+
+- [ ] Schema doc lists forbidden fields.
+- [ ] A test fails if a grant token body is written to the log.
+- [ ] Hashes are allowed. Raw signatures are not.
+
+### M141.5 Human accountability for generated code
+
+Labels: `docs`
+
+Depends on: M16.1.
+
+DoWI 8430.01 section 3.6: developers remain accountable for code generated or modified by AI, and that code gets the same review and security testing as handwritten code. Add a pull-request line: generated or not, reviewer name, tests run. A review cannot be the same agent that wrote the change.
+
+Acceptance:
+
+- [ ] docs/review.md contains the line.
+- [ ] The standards file links it.
+- [ ] No workflow treats an AI commit as reviewed by itself.
+
 ## Still out of scope
+
 
 
 
