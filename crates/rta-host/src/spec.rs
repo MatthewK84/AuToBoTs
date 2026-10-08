@@ -68,6 +68,33 @@ mod tests {
     }
 
     #[test]
+    fn every_stream_has_a_note() {
+        let spec = include_str!("../../../spec/monitor.lola");
+        let notes = include_str!("../../../docs/spec-notes.md");
+        for line in spec.lines() {
+            let line = line.trim();
+            if line.starts_with("input ") || line.starts_with("output ") {
+                let name = line
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap()
+                    .trim_end_matches(':');
+                assert!(notes.contains(name), "{name}");
+            }
+        }
+        assert!(notes.contains("## Blind spots"));
+        for spot in [
+            "Target identity",
+            "Collateral",
+            "Rules of engagement",
+            "Tracker truth",
+            "Estimator truth",
+        ] {
+            assert!(notes.contains(spot), "{spot}");
+        }
+    }
+
+    #[test]
     fn host_has_no_threshold_literals() {
         let host = [
             include_str!("main.rs"),
