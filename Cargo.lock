@@ -21,6 +21,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rta-host"
+version = "0.1.0"
+dependencies = [
+ "rta-spec",
+ "rta-switch",
+]
+
+[[package]]
+name = "rta-replay"
+version = "0.1.0"
+dependencies = [
+ "rta-spec",
+]
+
+[[package]]
 name = "rta-spec"
 version = "0.1.0"
 dependencies = [

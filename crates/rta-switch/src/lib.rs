@@ -1,4 +1,4 @@
-//! Pure switch. The only constructor of a command. No release actuator.
+//! Pure switch. Forbidden: rtlola-interpreter, mavlink, and a release actuator.
 
 use rta_spec::{Phase, Reason, TickInput, TickLog, Verdict};
 
@@ -18,19 +18,31 @@ pub fn decide(input: &TickInput) -> (Command, TickLog) {
     if input.abort_requested || input.phase == Phase::Abort {
         return (
             Command::Abort,
-            TickLog { verdict: Verdict::Revert, reason: Reason::Abort, grant_hash: None },
+            TickLog {
+                verdict: Verdict::Revert,
+                reason: Reason::Abort,
+                grant_hash: None,
+            },
         );
     }
     if !input.estimator_ok {
         return (
             Command::Recovery,
-            TickLog { verdict: Verdict::Revert, reason: Reason::Estimator, grant_hash: None },
+            TickLog {
+                verdict: Verdict::Revert,
+                reason: Reason::Estimator,
+                grant_hash: None,
+            },
         );
     }
     if input.endurance_s <= input.time_to_rally_s {
         return (
             Command::Recovery,
-            TickLog { verdict: Verdict::Revert, reason: Reason::Energy, grant_hash: None },
+            TickLog {
+                verdict: Verdict::Revert,
+                reason: Reason::Energy,
+                grant_hash: None,
+            },
         );
     }
     if !input.coast_ok {
@@ -52,7 +64,11 @@ pub fn decide(input: &TickInput) -> (Command, TickLog) {
 fn inhibit(reason: Reason) -> (Command, TickLog) {
     (
         Command::Navigation,
-        TickLog { verdict: Verdict::Inhibit, reason, grant_hash: None },
+        TickLog {
+            verdict: Verdict::Inhibit,
+            reason,
+            grant_hash: None,
+        },
     )
 }
 

@@ -1,0 +1,13 @@
+[package]
+name = "rta-replay"
+version = "0.1.0"
+edition = "2021"
+description = "Replay binary. Reads a tick log and diffs verdicts. No sockets."
+license = "Apache-2.0"
+
+[[bin]]
+name = "rta-replay"
+path = "src/main.rs"
+
+[dependencies]
+rta-spec = { path = "../rta-spec" }
