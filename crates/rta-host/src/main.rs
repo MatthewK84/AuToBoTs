@@ -115,6 +115,8 @@ fn main() -> ExitCode {
     let _tick = evaluator.tick(&mut built, &record, 0);
     let _converted = eval::monotonic_to_interpreter(config.tick.period_ms);
     let _faulted = evaluator.faulted();
+    let mut complex: Box<dyn rta_switch::Complex> = Box::new(rta_switch::StubComplex);
+    let _request = complex.request();
     println!("rta-host: config accepted, stub bind {bound:?}");
     ExitCode::SUCCESS
 }
