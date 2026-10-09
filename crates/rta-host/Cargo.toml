@@ -26,3 +26,7 @@ path = "src/bin/rta-sitl.rs"
 [[bin]]
 name = "rta-trips"
 path = "src/bin/rta-trips.rs"
+
+[[bin]]
+name = "rta-target"
+path = "src/bin/rta-target.rs"
