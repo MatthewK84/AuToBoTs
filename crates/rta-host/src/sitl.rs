@@ -153,7 +153,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn assurance_gap_covers_m11() {
         let note = include_str!("../../../docs/assurance-gap.md");
         for id in ["H1", "H2", "H3", "H4", "H5", "H6"] {
@@ -166,6 +165,7 @@ mod tests {
         assert!(note.contains("Following it is not a compliance claim."));
     }
 
+    #[test]
     fn runbook_has_no_clear_fault() {
         let book = include_str!("../../../docs/runbook.md");
         let name = ["clear", "_fault"].concat();
