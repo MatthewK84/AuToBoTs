@@ -5,6 +5,7 @@ use rta_host::tracker::Tracker;
 use rta_host::*;
 
 use std::env;
+use std::path::Path;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -45,11 +46,13 @@ fn main() -> ExitCode {
         }
         config::Fence::Fc => false,
     };
-    let spec_text = std::fs::read_to_string(&config.spec.path).unwrap_or_default();
-    if let Err(err) = spec::load_spec(&spec_text) {
-        eprintln!("spec: {err}");
-        return ExitCode::from(1);
-    }
+    let spec_text = match fault::load_spec_file(Path::new(&config.spec.path)) {
+        Ok(text) => text,
+        Err(err) => {
+            eprintln!("spec: {err}");
+            return ExitCode::from(1);
+        }
+    };
     let mut built = match monitor::build_once(&spec_text) {
         Ok(built) => built,
         Err(err) => {

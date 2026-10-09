@@ -21,6 +21,7 @@ type HostMonitor = Monitor<
 
 pub struct BuiltMonitor {
     monitor: HostMonitor,
+    fail_next: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -41,7 +42,10 @@ pub fn build_once(spec: &str) -> Result<BuiltMonitor, BuildError> {
         .monitor()
         .map_err(|err| BuildError::Parse(err.to_string()))?;
     BUILDS.fetch_add(1, Ordering::SeqCst);
-    Ok(BuiltMonitor { monitor })
+    Ok(BuiltMonitor {
+        monitor,
+        fail_next: false,
+    })
 }
 
 fn check_types(ir: &RtLolaMir) -> Result<(), BuildError> {
@@ -77,11 +81,19 @@ impl BuiltMonitor {
         &self.monitor
     }
 
+    pub fn fail_next(&mut self) {
+        self.fail_next = true;
+    }
+
     pub fn accept(
         &mut self,
         event: [Value; 6],
         at: std::time::Duration,
     ) -> Result<rtlola_interpreter::monitor::Verdicts<Incremental, RelativeFloat>, String> {
+        if self.fail_next {
+            self.fail_next = false;
+            return Err("injected interpreter error".into());
+        }
         self.monitor
             .accept_event(event, at)
             .map_err(|err| err.to_string())

@@ -5,6 +5,7 @@ pub mod config;
 pub mod eval;
 pub mod event;
 pub mod fail_closed;
+pub mod fault;
 pub mod fence;
 pub mod link;
 pub mod link_age;
