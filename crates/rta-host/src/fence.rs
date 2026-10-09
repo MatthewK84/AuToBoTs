@@ -1,8 +1,8 @@
 //! Host fence. The spec sees `fence_ok` only. The legal line is not the trip line.
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FenceInput {
-    pub polygon: &'static [[f64; 2]],
+pub struct FenceInput<'a> {
+    pub polygon: &'a [[f64; 2]],
     pub vertical_cap_m: f64,
     pub v_max: f64,
     pub a_max: f64,
@@ -16,7 +16,7 @@ pub fn stopping_margin_m(v_max: f64, a_max: f64, latency_s: f64) -> f64 {
     (v_max * v_max) / (2.0 * a_max) + latency_s * v_max
 }
 
-pub fn fence_ok(point: [f64; 2], alt_m: f64, fence: FenceInput) -> bool {
+pub fn fence_ok(point: [f64; 2], alt_m: f64, fence: FenceInput<'_>) -> bool {
     if fence.polygon.len() < 3 || fence.a_max <= 0.0 {
         return false;
     }
@@ -71,7 +71,7 @@ fn distance_to_segment(point: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
 mod tests {
     use super::*;
 
-    fn square() -> FenceInput {
+    fn square() -> FenceInput<'static> {
         FenceInput {
             polygon: &[[0.0, 0.0], [200.0, 0.0], [200.0, 200.0], [0.0, 200.0]],
             vertical_cap_m: 120.0,
