@@ -22,6 +22,7 @@ Space-separated fields:
 - `track_conf`
 - `range_m`
 - `verdict` as `pass`, `inhibit`, or `revert`
+- `filter_intervened` as 0 or 1, beside the verdict. Absent on older records means 0.
 - `reasons` as a comma-separated list, empty if none
 - `command` as `mode`, `setpoints`, or `idle` — the variant actually emitted
 - `eval_ms`

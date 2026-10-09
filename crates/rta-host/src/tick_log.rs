@@ -19,6 +19,7 @@ pub struct TickRecord {
     pub track_conf: f64,
     pub range_m: f64,
     pub verdict: Verdict,
+    pub filter_intervened: bool,
     pub reasons: Vec<String>,
     pub command: String,
     pub eval_ms: u64,
@@ -59,7 +60,7 @@ impl<W: Write> TickLog<W> {
         let reasons = record.reasons.join(",");
         writeln!(
             self.writer,
-            "tick={} fence_ok={} fix_age_ms={} link_age_ms={} fc_heartbeat_age_ms={} track_conf={} range_m={} verdict={} reasons={} command={} eval_ms={} spec_hash={:016x}",
+            "tick={} fence_ok={} fix_age_ms={} link_age_ms={} fc_heartbeat_age_ms={} track_conf={} range_m={} verdict={} filter_intervened={} reasons={} command={} eval_ms={} spec_hash={:016x}",
             record.tick,
             record.fence_ok as u8,
             record.fix_age_ms,
@@ -68,6 +69,7 @@ impl<W: Write> TickLog<W> {
             record.track_conf,
             record.range_m,
             verdict_name(record.verdict),
+            record.filter_intervened as u8,
             reasons,
             record.command,
             record.eval_ms,
@@ -135,6 +137,7 @@ mod tests {
             track_conf: 0.2,
             range_m: 40.0,
             verdict: Verdict::Inhibit,
+            filter_intervened: true,
             reasons: vec!["weak_track".into()],
             command: "idle".into(),
             eval_ms: 1,
@@ -167,5 +170,16 @@ mod tests {
         assert!(text.contains("verdict=inhibit"));
         assert!(text.contains("reasons=weak_track"));
         assert!(text.contains("command=idle"));
+    }
+
+    #[test]
+    fn intervention_sits_beside_the_verdict() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("rta-log-filter-{}.log", std::process::id()));
+        let mut log = TickLog::open(&path, 1, 1).unwrap();
+        log.append(&sample()).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(text.contains("verdict=inhibit filter_intervened=1"));
     }
 }

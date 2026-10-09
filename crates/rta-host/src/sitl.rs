@@ -223,4 +223,69 @@ mod tests {
         assert!(book.contains("golden-trace review"));
         assert!(book.contains("restart"));
     }
+
+    #[test]
+    fn backup_rollout_rejects_past_the_deadline() {
+        use rta_filter::{
+            backup_apply, BackupModel, FilterFault, Rally, Setpoint, State, Velocity,
+        };
+        use rta_spec::RecoveryMode;
+        use rta_switch::decide;
+        let note = include_str!("../../../docs/cbf-contract.md");
+        assert!(note.contains("not a hidden margin"));
+        assert!(note.contains("unmeasured"));
+        assert!(note.contains("filter_intervened"));
+        let polygon = [[0.0, 0.0], [200.0, 0.0], [200.0, 200.0], [0.0, 200.0]];
+        let state = State {
+            north: 100.0,
+            east: 100.0,
+            down: 20.0,
+            speed: 0.0,
+        };
+        let proposed = Setpoint {
+            north: 110.0,
+            east: 100.0,
+            down: 20.0,
+            yaw: 0.0,
+        };
+        let constraints = rta_filter::Constraints {
+            speed_cap: 10.0,
+            alt_floor: 0.0,
+            alt_cap: 40.0,
+        };
+        let rally = Rally {
+            north: 100.0,
+            east: 100.0,
+            down: 20.0,
+        };
+        let model = BackupModel {
+            v_max: 10.0,
+            a_max: 2.0,
+            dt_s: 0.05,
+            horizon_steps: 20,
+            deadline_steps: 4,
+        };
+        let fault = backup_apply(
+            state,
+            Velocity {
+                north: 0.0,
+                east: 0.0,
+                down: 0.0,
+            },
+            proposed,
+            constraints,
+            rally,
+            model,
+            &polygon,
+        )
+        .unwrap_err();
+        assert_eq!(fault, FilterFault::Timeout);
+        let command = decide(
+            rta_spec::Verdict::Revert,
+            None,
+            RecoveryMode::Loiter,
+            RecoveryMode::Rtl,
+        );
+        assert!(matches!(command, rta_switch::SwitchCommand::Mode { .. }));
+    }
 }

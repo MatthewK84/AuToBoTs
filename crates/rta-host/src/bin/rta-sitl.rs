@@ -111,6 +111,7 @@ fn main() -> ExitCode {
         track_conf: record.track_conf(),
         range_m: record.range_m(),
         verdict,
+        filter_intervened: false,
         reasons: Vec::new(),
         command: command_name(&SwitchCommand::Idle),
         eval_ms: 1,

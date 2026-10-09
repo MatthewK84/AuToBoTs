@@ -98,6 +98,7 @@ fn parse_record(line: &str) -> Result<TickRecord, &'static str> {
     let mut eval_ms = 0;
     let mut spec_hash = 0;
     let mut alt_m = 0.0;
+    let mut filter_intervened = false;
     for field in line.split_whitespace() {
         let Some((key, value)) = field.split_once('=') else {
             return Err("field");
@@ -120,6 +121,7 @@ fn parse_record(line: &str) -> Result<TickRecord, &'static str> {
             "eval_ms" => eval_ms = value.parse().unwrap_or(0),
             "spec_hash" => spec_hash = u64::from_str_radix(value, 16).unwrap_or(0),
             "alt_m" => alt_m = value.parse().map_err(|_| "alt")?,
+            "filter_intervened" => filter_intervened = value == "1",
             _ => {}
         }
     }
@@ -132,6 +134,7 @@ fn parse_record(line: &str) -> Result<TickRecord, &'static str> {
         track_conf: track_conf.ok_or("field")?,
         range_m: range_m.ok_or("field")?,
         verdict: verdict.ok_or("field")?,
+        filter_intervened,
         reasons,
         command,
         eval_ms,
