@@ -1,0 +1,1 @@
+board=Jetson Orin Nano 8GB date=2026-10-09 samples=512611400 worst_us=60839 deadline_ms=5 cpu_pct=96.0 power_note=10W watchdog=mode Rtl

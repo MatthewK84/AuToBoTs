@@ -70,6 +70,24 @@ pub fn hover_verdict(
     eval.tick(monitor, record, 1_000).verdict
 }
 
+pub fn paused_watchdog_commands_recovery(period_ms: u64, misses: u32) -> bool {
+    use crate::mode::ModeSender;
+    use crate::watchdog::Watchdog;
+    use rta_spec::RecoveryMode;
+    let mut dog = Watchdog::new(period_ms, misses);
+    dog.publish(0);
+    let mut sender = ModeSender::default();
+    let mut sink = Vec::new();
+    dog.check(
+        period_ms * u64::from(misses),
+        RecoveryMode::Loiter,
+        RecoveryMode::Rtl,
+        &mut sender,
+        &mut sink,
+    );
+    sink == ["mode Rtl"]
+}
+
 fn centroid(polygon: &[[f64; 2]]) -> [f64; 2] {
     let n = polygon.len() as f64;
     let (x, y) = polygon.iter().fold((0.0, 0.0), |acc, point| {
@@ -118,5 +136,10 @@ mod tests {
         let artifact = include_str!("../../../crates/rta-host/fixtures/sitl-timing.txt");
         assert!(artifact.contains(TIMING_NOTE));
         assert!(artifact.contains("eval_ms"));
+    }
+
+    #[test]
+    fn paused_eval_commands_recovery() {
+        assert!(paused_watchdog_commands_recovery(50, 3));
     }
 }
