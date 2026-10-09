@@ -1,0 +1,1 @@
+named_board=Jetson Orin Nano 8GB measured_on=build-host date=2026-10-09 mode=paced samples=1194 worst_eval_us=2363 over_deadline=0 deadline_ms=5 cpu_pct=0.1 power_note=10W watchdog=mode Rtl decision=deadline-unchanged
