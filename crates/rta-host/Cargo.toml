@@ -22,3 +22,7 @@ ordered-float = "=3.9.2"
 [[bin]]
 name = "rta-sitl"
 path = "src/bin/rta-sitl.rs"
+
+[[bin]]
+name = "rta-trips"
+path = "src/bin/rta-trips.rs"
