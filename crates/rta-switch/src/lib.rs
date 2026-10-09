@@ -258,6 +258,78 @@ mod tests {
     }
 
     #[test]
+    fn verdict_and_fail_closed_table() {
+        let request = Request {
+            north: 9.0,
+            east: 8.0,
+            down: 7.0,
+            yaw: 6.0,
+            commit: true,
+        };
+        let recovery = rta_spec::RecoveryMode::Rtl;
+        let other = rta_spec::RecoveryMode::Loiter;
+        let fail_closed = [
+            "no_verdict",
+            "late_tick",
+            "interpreter_fault",
+            "missing_heartbeat",
+            "write_failure",
+        ];
+        for name in fail_closed {
+            let command = decide(Verdict::Revert, Some(request), other, recovery);
+            match command {
+                SwitchCommand::Mode { .. } | SwitchCommand::Idle => {}
+                SwitchCommand::Setpoints { north, .. } => {
+                    panic!("{name} kept request {north}")
+                }
+            }
+            let text = format!("{command:?}");
+            assert!(!text.contains("9.0"), "{name}");
+        }
+        let rows = [
+            (Verdict::Pass, Some(request), false),
+            (Verdict::Pass, None, false),
+            (Verdict::Inhibit, Some(request), false),
+            (Verdict::Inhibit, None, false),
+            (Verdict::Revert, Some(request), true),
+            (Verdict::Revert, None, true),
+        ];
+        for (verdict, asked, recovery_only) in rows {
+            let command = decide(verdict, asked, other, recovery);
+            assert_eq!(matches!(command, SwitchCommand::Mode { .. }), recovery_only);
+            if let SwitchCommand::Setpoints { commit, north, .. } = command {
+                assert!(!recovery_only);
+                if verdict == Verdict::Inhibit {
+                    assert!(!commit);
+                }
+                if asked.is_none() {
+                    assert_eq!(north, 0.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn inhibit_cannot_carry_commit() {
+        let command = decide(
+            Verdict::Inhibit,
+            Some(Request {
+                north: 1.0,
+                east: 0.0,
+                down: 0.0,
+                yaw: 0.0,
+                commit: true,
+            }),
+            rta_spec::RecoveryMode::Loiter,
+            rta_spec::RecoveryMode::Rtl,
+        );
+        match command {
+            SwitchCommand::Setpoints { commit: false, .. } => {}
+            other => panic!("inhibit carried a commit: {other:?}"),
+        }
+    }
+
+    #[test]
     fn stub_request_never_appears_in_revert() {
         let mut stub = StubComplex;
         let request = stub.request();
