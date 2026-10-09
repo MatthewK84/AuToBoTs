@@ -153,6 +153,52 @@ mod tests {
     }
 
     #[test]
+    fn filter_fault_is_revert_input() {
+        use rta_filter::{apply, Constraints, FilterFault, Setpoint, State};
+        use rta_spec::{RecoveryMode, Verdict};
+        use rta_switch::decide;
+        let state = State {
+            north: 0.0,
+            east: 0.0,
+            down: 10.0,
+            speed: 1.0,
+        };
+        let proposed = Setpoint {
+            north: f64::INFINITY,
+            east: 0.0,
+            down: 10.0,
+            yaw: 0.0,
+        };
+        let constraints = Constraints {
+            speed_cap: 5.0,
+            alt_floor: 0.0,
+            alt_cap: 40.0,
+        };
+        let fault = apply(state, proposed, constraints, false, false).unwrap_err();
+        assert_eq!(fault, FilterFault::NonFinite);
+        let timed = apply(
+            state,
+            Setpoint {
+                north: 1.0,
+                east: 0.0,
+                down: 10.0,
+                yaw: 0.0,
+            },
+            constraints,
+            true,
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(timed, FilterFault::Timeout);
+        let verdict = Verdict::Revert;
+        let command = decide(verdict, None, RecoveryMode::Loiter, RecoveryMode::Rtl);
+        assert!(matches!(command, rta_switch::SwitchCommand::Mode { .. }));
+        let manifest = include_str!("../../../crates/rta-filter/Cargo.toml");
+        assert!(!manifest.to_ascii_lowercase().contains("mavlink"));
+        assert!(!manifest.to_ascii_lowercase().contains("rtlola"));
+    }
+
+    #[test]
     fn assurance_gap_covers_m11() {
         let note = include_str!("../../../docs/assurance-gap.md");
         for id in ["H1", "H2", "H3", "H4", "H5", "H6"] {
