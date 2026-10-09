@@ -288,4 +288,19 @@ mod tests {
         );
         assert!(matches!(command, rta_switch::SwitchCommand::Mode { .. }));
     }
+
+    #[test]
+    fn barrier_evidence_names_the_architecture_and_the_residual() {
+        let note = include_str!("../../../docs/cbf-evidence.md");
+        assert!(note.contains("ASTM F3269-21"));
+        assert!(note.contains("enclosing architecture"));
+        assert!(note.contains("Forward invariance of the backup set under the point-mass model"));
+        assert!(note.contains("not a replacement for the recovery"));
+        assert!(note.contains("Invariance under the real aircraft is not shown."));
+        assert!(note.contains("Invariance under wind is not shown."));
+        assert!(note.contains("Invariance under a wrong fence is not shown."));
+        assert!(note.contains("Residual model error is explicitly unmeasured."));
+        assert!(note.contains("not a hidden margin"));
+        assert!(note.contains("not a compliance claim"));
+    }
 }
