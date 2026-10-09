@@ -107,6 +107,7 @@ fn main() -> ExitCode {
         track_conf: 0.0,
         range_m: 0.0,
         verdict: rta_spec::Verdict::Pass,
+        filter_intervened: false,
         reasons: Vec::new(),
         command: tick_log::command_name(&rta_switch::SwitchCommand::Idle),
         eval_ms: 0,
