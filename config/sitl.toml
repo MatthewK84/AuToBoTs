@@ -1,0 +1,28 @@
+[link]
+endpoint = "udp:127.0.0.1:14540"
+system_id = 1
+component_id = 191
+
+[tick]
+period_ms = 50
+deadline_ms = 5
+watchdog_misses = 3
+mode_change_latency_ms = 200
+tracker_hold_ms = 200
+
+[recovery]
+mode = "rtl"
+
+[spec]
+path = "spec/monitor.lola"
+
+[log]
+path = "sitl.log"
+flush_every_n = 1
+
+[fence]
+source = "host"
+polygon = [[0.0, 0.0], [200.0, 0.0], [200.0, 200.0], [0.0, 200.0]]
+vertical_cap_m = 120.0
+v_max = 15.0
+a_max = 3.0

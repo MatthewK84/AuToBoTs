@@ -14,6 +14,7 @@ pub mod mode;
 pub mod monitor;
 pub mod read;
 pub mod replay;
+pub mod sitl;
 pub mod spec;
 pub mod stale;
 pub mod tick;
