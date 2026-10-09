@@ -22,4 +22,6 @@ trap cleanup EXIT
 sleep 0.5
 cargo run -q -p rta-host --bin rta-sitl -- config/sitl.toml
 grep -q 'verdict=pass' sitl.log
+grep -q 'SITL timing is not target timing' sitl.log
+grep -q 'eval_ms' sitl-timing.txt
 echo "sitl: nominal hover logged pass"

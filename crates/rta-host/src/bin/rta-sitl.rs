@@ -6,7 +6,7 @@ use rta_host::fault::load_spec_file;
 use rta_host::link::{open, parse_endpoint};
 use rta_host::mavlink_link::MavLink;
 use rta_host::monitor::build_once;
-use rta_host::sitl::{hover_record, hover_verdict, EXAMPLE_ENDPOINT};
+use rta_host::sitl::{hover_record, hover_verdict, timing_header, EXAMPLE_ENDPOINT};
 use rta_host::tick_log::{command_name, TickLog, TickRecord};
 use rta_spec::Verdict;
 use rta_switch::SwitchCommand;
@@ -79,9 +79,20 @@ fn main() -> ExitCode {
         }
     };
     let mut eval = Evaluator::default();
+    let started = std::time::Instant::now();
     let verdict = hover_verdict(&mut eval, &mut built, &record);
+    let eval_ms = started.elapsed().as_millis() as u64;
     if verdict != Verdict::Pass {
         eprintln!("sitl: hover was {verdict:?}");
+        return ExitCode::from(1);
+    }
+    let header = timing_header(0, &[eval_ms]);
+    if std::fs::write(Path::new("sitl-timing.txt"), &header).is_err() {
+        eprintln!("sitl: timing artifact failed");
+        return ExitCode::from(1);
+    }
+    if std::fs::write(Path::new(&config.log.path), &header).is_err() {
+        eprintln!("sitl: log header failed");
         return ExitCode::from(1);
     }
     let mut log = match TickLog::open(Path::new(&config.log.path), config.log.flush_every_n, 0) {

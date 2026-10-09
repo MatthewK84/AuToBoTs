@@ -1,0 +1,3 @@
+# rta-log 1 spec_hash=0000000000000000 timing=sitl-not-target
+# SITL timing is not target timing
+# eval_ms count=5 min=1 p50=3 p95=5 max=5

@@ -13,3 +13,7 @@ The example polygon is one meter on a side, smaller than the stopping margin at 
 - Fence breach writes `fc_report=rtl` and `verdict=revert` with `command=mode`.
 - A stopped heartbeat writes `verdict=revert`.
 - A weak track inside commit range writes `verdict=inhibit` and `commit=0`. The log must not contain a commit command.
+
+## Timing
+
+SITL timing is not target timing. The SITL log header carries that disclaimer, and the eval-duration distribution is written to `sitl-timing.txt`. Those numbers are a host-side sample, not a board measurement.

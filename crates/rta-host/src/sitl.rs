@@ -8,6 +8,32 @@ use rta_spec::{InputRecord, Verdict};
 
 pub const EXAMPLE_ENDPOINT: &str = "udp:127.0.0.1:14540";
 
+pub const TIMING_NOTE: &str = "SITL timing is not target timing";
+
+pub fn timing_header(spec_hash: u64, samples_ms: &[u64]) -> String {
+    let dist = distribution(samples_ms);
+    format!(
+        "# rta-log 1 spec_hash={spec_hash:016x} timing=sitl-not-target\n# {TIMING_NOTE}\n# eval_ms {dist}\n"
+    )
+}
+
+pub fn distribution(samples_ms: &[u64]) -> String {
+    if samples_ms.is_empty() {
+        return "count=0".into();
+    }
+    let mut ordered = samples_ms.to_vec();
+    ordered.sort_unstable();
+    let at = |q: f64| ordered[((ordered.len() - 1) as f64 * q) as usize];
+    format!(
+        "count={} min={} p50={} p95={} max={}",
+        ordered.len(),
+        ordered[0],
+        at(0.50),
+        at(0.95),
+        ordered[ordered.len() - 1]
+    )
+}
+
 pub fn hover_record(config: &Config) -> Result<InputRecord, &'static str> {
     let Fence::Host {
         polygon,
@@ -79,5 +105,18 @@ mod tests {
         let mut built = build_once(spec).expect("spec");
         let mut eval = Evaluator::default();
         assert_eq!(hover_verdict(&mut eval, &mut built, &record), Verdict::Pass);
+    }
+
+    #[test]
+    fn sitl_timing_is_not_target_timing() {
+        let header = timing_header(0, &[1, 2, 3, 4, 5]);
+        assert!(header.contains(TIMING_NOTE));
+        assert!(header.contains("timing=sitl-not-target"));
+        assert!(header.contains("count=5"));
+        let doc = include_str!("../../../docs/sitl.md");
+        assert!(doc.contains(TIMING_NOTE));
+        let artifact = include_str!("../../../crates/rta-host/fixtures/sitl-timing.txt");
+        assert!(artifact.contains(TIMING_NOTE));
+        assert!(artifact.contains("eval_ms"));
     }
 }
