@@ -1,0 +1,17 @@
+name: kani
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.1
+      - name: Install the pinned Kani solver
+        run: cargo install --locked kani-verifier --version 0.68.0
+      - name: Set up Kani
+        run: cargo kani setup
+      - name: Prove the switch harness
+        run: cargo kani -p rta-switch
