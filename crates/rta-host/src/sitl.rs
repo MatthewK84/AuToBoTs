@@ -151,4 +151,17 @@ mod tests {
         assert!(note.contains("deadline stays 5 ms"));
         assert!(note.contains("not raised"));
     }
+
+    #[test]
+    fn runbook_has_no_clear_fault() {
+        let book = include_str!("../../../docs/runbook.md");
+        let name = ["clear", "_fault"].concat();
+        assert!(book.contains("no `clear_fault`"));
+        assert!(!book.contains(&format!("pub fn {name}")));
+        assert!(book.contains("Inhibit"));
+        assert!(book.contains("Revert"));
+        assert!(book.contains("rta.log"));
+        assert!(book.contains("golden-trace review"));
+        assert!(book.contains("restart"));
+    }
 }
