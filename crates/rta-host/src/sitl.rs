@@ -142,4 +142,13 @@ mod tests {
     fn paused_eval_commands_recovery() {
         assert!(paused_watchdog_commands_recovery(50, 3));
     }
+
+    #[test]
+    fn deadline_stays_five_ms() {
+        let config = parse_str(include_str!("../../../config/sitl.toml")).expect("sitl");
+        assert_eq!(config.tick.deadline_ms, 5);
+        let note = include_str!("../../../docs/deadline.md");
+        assert!(note.contains("deadline stays 5 ms"));
+        assert!(note.contains("not raised"));
+    }
 }
