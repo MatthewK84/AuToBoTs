@@ -2,6 +2,9 @@
 
 use rta_spec::{Phase, Reason, TickInput, TickLog, Verdict};
 
+#[cfg(kani)]
+mod verify;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
     Idle,
@@ -384,6 +387,20 @@ mod tests {
             } => {}
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn kani_harness_covers_decide_only() {
+        let harness = include_str!("verify.rs");
+        assert!(harness.contains("fn decide_variants_are_exclusive"));
+        assert!(harness.contains("fn revert_never_yields_setpoints"));
+        assert!(harness.contains("fn inhibit_never_yields_commit"));
+        assert!(harness.contains("decide("));
+        assert!(!harness.contains("mavlink"));
+        let docs = include_str!("../../../docs/kani.md");
+        assert!(docs.contains("cargo kani -p rta-switch"));
+        let ci = include_str!("../../../.github/workflows/ci.yml");
+        assert!(!ci.contains("cargo kani"));
     }
 
     #[test]
