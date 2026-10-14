@@ -13,6 +13,7 @@ pub mod link_age;
 pub mod mavlink_link;
 pub mod mode;
 pub mod monitor;
+pub mod quarantine;
 pub mod read;
 pub mod replay;
 pub mod shadow;

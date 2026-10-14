@@ -20,3 +20,11 @@ A reload bundle is a directory. It is not a hot reload. Accepting a bundle does 
 3. A `new_hash` that is not the pin of `monitor.lola`, or a `previous_hash` that is not the running spec, is a hash mismatch and is rejected.
 
 Rejection does not write the candidate into the running monitor. The caller keeps the monitor it already has. Swap is M13.2.
+
+## Quarantine
+
+Swap is not immediate. The candidate is built beside the running spec and replayed on the `must_hold` fixtures and on the last logged ticks. A spec that flips a `must_hold` fixture is refused. A shadow eval over the deadline is refused. Refusal leaves the command path on the running spec.
+
+A fault mid-swap latches `Revert` and cannot leave the command path on the new spec. There is no public `clear_fault`. The latch clears only when the process is on a spec that has passed quarantine.
+
+On-aircraft learning may write a candidate weight file. It may not point the active path at that file. Inference keeps using the active weights. Activation is a bundle swap. A successful swap logs the old hash, the new hash, and the tick number.
