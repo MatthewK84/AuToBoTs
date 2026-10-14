@@ -13,6 +13,8 @@ pub struct Config {
     pub spec: Spec,
     pub log: Log,
     pub fence: Fence,
+    #[serde(default)]
+    pub shadow: Shadow,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -72,6 +74,28 @@ pub enum Fence {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Shadow {
+    pub enabled: bool,
+    pub inference_budget_ms: u64,
+    pub weights_path: String,
+    pub weights_hash: String,
+    pub silence_ticks: u32,
+}
+
+impl Default for Shadow {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            inference_budget_ms: 2,
+            weights_path: String::new(),
+            weights_hash: String::new(),
+            silence_ticks: 3,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ConfigError(pub String);
 
@@ -111,6 +135,13 @@ fn validate(config: &Config) -> Result<(), ConfigError> {
     if config.log.flush_every_n < 1 {
         return Err(ConfigError("log.flush_every_n must be at least 1".into()));
     }
+    if config.shadow.inference_budget_ms == 0
+        || config.shadow.inference_budget_ms >= config.tick.deadline_ms
+    {
+        return Err(ConfigError(
+            "shadow.inference_budget_ms must be at least 1 and less than tick.deadline_ms".into(),
+        ));
+    }
     let endpoint = &config.link.endpoint;
     let ok = endpoint.starts_with("udp:") || endpoint.starts_with("serial:");
     if !ok {
@@ -136,6 +167,8 @@ mod tests {
         assert_eq!(config.tick.deadline_ms, 5);
         assert_eq!(config.recovery.mode, RecoveryMode::Rtl);
         assert!(matches!(config.fence, Fence::Host { .. }));
+        assert!(!config.shadow.enabled);
+        assert_eq!(config.shadow.inference_budget_ms, 2);
     }
 
     #[test]

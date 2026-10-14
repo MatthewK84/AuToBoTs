@@ -26,3 +26,10 @@ polygon = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
 vertical_cap_m = 120.0
 v_max = 15.0
 a_max = 3.0
+
+[shadow]
+enabled = false
+inference_budget_ms = 2
+weights_path = ""
+weights_hash = ""
+silence_ticks = 3

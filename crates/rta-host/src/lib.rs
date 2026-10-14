@@ -22,3 +22,4 @@ pub mod tick;
 pub mod tick_log;
 pub mod tracker;
 pub mod watchdog;
+pub mod weights;
