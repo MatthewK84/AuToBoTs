@@ -20,3 +20,11 @@ A missing grant, an expired grant, a wrong fence hash, a revoked nonce, a bad si
 The grant is a signed record: issuer, not-before, not-after, fence hash, max range, nonce, and a detached pin. The pin is not a qualified cryptographic signature.
 
 The commit flag is set only in the switch. The filter crate does not name it and does not depend on the switch. The tracker does not construct `Command::Commit`.
+
+## Operator path
+
+The grant arrives on the existing link as a line the adapter parses into the token: `GRANT issuer=... not_before=... not_after=... fence_hash=... max_range=... nonce=... sig=...`. `WITHDRAW nonce=...` invalidates that nonce. The next tick is `Inhibit` for commit even if the aircraft is still inside the window.
+
+A flight-controller heartbeat or `SET_MODE` is a mode change. The adapter does not invent a grant from it.
+
+The operator indication is a logged line: `commit_armed`, `commit_inhibited` with a reason code, or `reverted`. Reason codes are the trigger names `fence`, `fix`, `link`, `heartbeat`, `weak_track`, plus `no_grant`, `grant_expired`, `grant_revoked`, and `fence_hash`.

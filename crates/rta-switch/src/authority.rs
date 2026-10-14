@@ -121,6 +121,56 @@ pub fn decide_authorized(
     }
 }
 
+pub const REASON_CODES: &[&str] = &[
+    "fence",
+    "fix",
+    "link",
+    "heartbeat",
+    "weak_track",
+    "no_grant",
+    "grant_expired",
+    "grant_revoked",
+    "fence_hash",
+];
+
+pub fn reason_code(reason: AuthorityReason) -> &'static str {
+    match reason {
+        AuthorityReason::NoGrant => "no_grant",
+        AuthorityReason::Expired => "grant_expired",
+        AuthorityReason::Revoked => "grant_revoked",
+        AuthorityReason::FenceHash => "fence_hash",
+        AuthorityReason::BadSignature => "no_grant",
+        AuthorityReason::OutsideWindow => "fence_hash",
+        AuthorityReason::FilterRejected => "fence",
+        AuthorityReason::NotPass => "weak_track",
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Indication {
+    CommitArmed,
+    CommitInhibited(&'static str),
+    Reverted,
+}
+
+pub fn indication(decision: CommitDecision) -> Indication {
+    match decision {
+        CommitDecision::Commit => Indication::CommitArmed,
+        CommitDecision::Inhibit(reason) => Indication::CommitInhibited(reason_code(reason)),
+        CommitDecision::Revert => Indication::Reverted,
+    }
+}
+
+pub fn indication_line(indication: Indication) -> String {
+    match indication {
+        Indication::CommitArmed => "indication=commit_armed".into(),
+        Indication::CommitInhibited(reason) => {
+            format!("indication=commit_inhibited reason={reason}")
+        }
+        Indication::Reverted => "indication=reverted".into(),
+    }
+}
+
 fn pin(bytes: &[u8]) -> u64 {
     let mut hash = 0xcbf29ce484222325_u64;
     for byte in bytes {
@@ -254,6 +304,25 @@ mod tests {
             authorize(&tick),
             CommitDecision::Inhibit(AuthorityReason::FilterRejected)
         );
+    }
+
+    #[test]
+    fn reason_codes_are_stable_strings() {
+        let expected = [
+            (AuthorityReason::NoGrant, "no_grant"),
+            (AuthorityReason::Expired, "grant_expired"),
+            (AuthorityReason::Revoked, "grant_revoked"),
+            (AuthorityReason::FenceHash, "fence_hash"),
+        ];
+        for (reason, code) in expected {
+            assert_eq!(reason_code(reason), code);
+            assert!(REASON_CODES.contains(&code));
+        }
+        for trigger in ["fence", "fix", "link", "heartbeat", "weak_track"] {
+            assert!(REASON_CODES.contains(&trigger));
+        }
+        let line = indication_line(Indication::CommitInhibited("grant_revoked"));
+        assert_eq!(line, "indication=commit_inhibited reason=grant_revoked");
     }
 
     #[test]
