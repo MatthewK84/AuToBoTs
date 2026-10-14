@@ -171,6 +171,50 @@ pub fn indication_line(indication: Indication) -> String {
     }
 }
 
+pub struct TraceRow {
+    pub conjunct: &'static str,
+    pub test: &'static str,
+    pub policy: &'static str,
+}
+
+pub const AUTHORITY_TRACE: &[TraceRow] = &[
+    TraceRow {
+        conjunct: "verdict is Pass",
+        test: "revert_beats_a_valid_grant",
+        policy: "1.2.a.(1)(b)",
+    },
+    TraceRow {
+        conjunct: "filter did not reject",
+        test: "a_rejected_filter_inhibits_commit",
+        policy: "1.2.a.(1)(b)",
+    },
+    TraceRow {
+        conjunct: "fresh operator grant",
+        test: "no_grant_is_inhibit",
+        policy: "1.2.a",
+    },
+    TraceRow {
+        conjunct: "time window",
+        test: "expired_grant_is_inhibit",
+        policy: "1.2.a.(1)(b)",
+    },
+    TraceRow {
+        conjunct: "geographic window",
+        test: "wrong_fence_hash_is_inhibit",
+        policy: "1.2.a.(1)(b)",
+    },
+    TraceRow {
+        conjunct: "grant not revoked",
+        test: "revoked_nonce_is_inhibit",
+        policy: "1.2.a.(1)(b)",
+    },
+    TraceRow {
+        conjunct: "mode change is not a grant",
+        test: "a_mode_change_is_not_a_grant",
+        policy: "1.2.a",
+    },
+];
+
 fn pin(bytes: &[u8]) -> u64 {
     let mut hash = 0xcbf29ce484222325_u64;
     for byte in bytes {
@@ -304,6 +348,21 @@ mod tests {
             authorize(&tick),
             CommitDecision::Inhibit(AuthorityReason::FilterRejected)
         );
+    }
+
+    #[test]
+    fn the_trace_has_a_row_per_conjunct_and_the_non_claim() {
+        let doc = include_str!("../../../docs/authority.md");
+        for row in AUTHORITY_TRACE {
+            assert!(doc.contains(row.conjunct), "{}", row.conjunct);
+            assert!(doc.contains(row.test), "{}", row.test);
+            assert!(doc.contains(row.policy), "{}", row.policy);
+        }
+        assert!(doc.contains("appropriate levels of human judgment"));
+        assert!(doc.contains("timeframe and geographic area"));
+        assert!(doc.contains("terminate the engagement or obtain additional operator input"));
+        assert!(doc.contains("does not implement a weapon, a fuze, or a release actuator"));
+        assert!(doc.contains("not a compliance claim"));
     }
 
     #[test]

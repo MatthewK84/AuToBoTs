@@ -1,8 +1,33 @@
 # Commit authority
 
-Commit is a software conjunction. It does not close a circuit, arm a device, or command a release mechanism. Those are outside this repository.
+Commit is a software conjunction. This repository does not implement a weapon, a fuze, or a release actuator. Those are outside this repository. This note is a design trace, not a compliance claim.
 
-DoDD 3000.09 is the policy reference. The design leaves a path for an operator to withhold or withdraw judgment. Absence of a grant is withhold. A revoked nonce is withdraw. A system that cannot meet the grant window terminates the commit and does not continue it.
+DoDD 3000.09, January 25, 2023, is the policy reference. Paragraph 1.1.b.(7) says the directive does not apply to autonomous or semi-autonomous systems that are not weapon systems. This repository does not implement a weapon system.
+
+## Policy sentences
+
+Quoted from DoDD 3000.09, January 25, 2023:
+
+- 1.2.a: "Autonomous and semi-autonomous weapon systems will be designed to allow commanders and operators to exercise appropriate levels of human judgment over the use of force."
+- 1.2.a.(1)(b): "Complete engagements within a timeframe and geographic area, as well as other relevant environmental and operational constraints, consistent with commander and operator intentions. If unable to do so, the systems will terminate the engagement or obtain additional operator input before continuing the engagement."
+
+Absence of a grant is the withhold path. A revoked nonce is the withdraw path. A window that cannot be met terminates the commit and does not continue it.
+
+## Trace
+
+Each conjunct maps to a test and to the paragraph it is meant to support. A missing row fails the switch test.
+
+| Conjunct | Test | DoDD 3000.09 |
+| --- | --- | --- |
+| verdict is Pass | `revert_beats_a_valid_grant` | 1.2.a.(1)(b) terminate |
+| filter did not reject | `a_rejected_filter_inhibits_commit` | 1.2.a.(1)(b) constraints |
+| fresh operator grant | `no_grant_is_inhibit` | 1.2.a appropriate levels of human judgment |
+| time window | `expired_grant_is_inhibit` | 1.2.a.(1)(b) timeframe |
+| geographic window | `wrong_fence_hash_is_inhibit` | 1.2.a.(1)(b) geographic area |
+| grant not revoked | `revoked_nonce_is_inhibit` | 1.2.a.(1)(b) additional operator input |
+| mode change is not a grant | `a_mode_change_is_not_a_grant` | 1.2.a appropriate levels of human judgment |
+
+`Revert` beats a valid grant. That is the terminate path in 1.2.a.(1)(b). A system that cannot meet the grant window terminates the commit and does not continue it.
 
 ## Same-tick conjuncts
 
@@ -15,7 +40,7 @@ DoDD 3000.09 is the policy reference. The design leaves a path for an operator t
 - the grant fence hash matches the aircraft fence, the aircraft is inside that fence, and the range is within `max_range_m`
 - the grant nonce is not revoked
 
-A missing grant, an expired grant, a wrong fence hash, a revoked nonce, a bad signature, a filter rejection, and a non-pass verdict are `Inhibit`. `Revert` beats a valid grant. Verification failure is `Inhibit`, not a crash.
+A missing grant, an expired grant, a wrong fence hash, a revoked nonce, a bad signature, a filter rejection, and a non-pass verdict are `Inhibit`. Verification failure is `Inhibit`, not a crash.
 
 The grant is a signed record: issuer, not-before, not-after, fence hash, max range, nonce, and a detached pin. The pin is not a qualified cryptographic signature.
 
