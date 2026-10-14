@@ -2,6 +2,8 @@
 
 use rta_spec::{Phase, Reason, TickInput, TickLog, Verdict};
 
+pub mod authority;
+
 #[cfg(kani)]
 mod verify;
 
