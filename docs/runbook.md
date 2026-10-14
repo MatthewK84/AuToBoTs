@@ -26,4 +26,4 @@ A latched interpreter fault stays latched. Stop the host and start it again. Tha
 
 ## Spec edit
 
-A spec edit requires a golden-trace review in the same change. Golden traces live in `crates/rta-host/fixtures/golden`. CI runs `rta-replay` on that directory. Do not ship a spec change without that review. There is no hot reload.
+A spec edit requires a golden-trace review in the same change. Golden traces live in `crates/rta-host/fixtures/golden`. CI runs `rta-replay` on that directory. Do not ship a spec change without that review. A running spec changes only through a signed bundle that passes quarantine. Unsigned reload, fixture regression, swap timeout, and a learned file without a bundle are H11 through H14 in `docs/hazards.md`. There is no operator command that activates a candidate weight file.

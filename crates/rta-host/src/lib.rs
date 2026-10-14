@@ -8,6 +8,7 @@ pub mod event;
 pub mod fail_closed;
 pub mod fault;
 pub mod fence;
+pub mod learning_hazards;
 pub mod link;
 pub mod link_age;
 pub mod mavlink_link;

@@ -22,5 +22,10 @@ Each M1.1 hazard has a row. H7 through H10 are the later rows already in `docs/h
 | H8 | none; the host latches an interpreter error | `h8_interpreter_err_reverts` |
 | H9 | none; the switch command is one enum | `revert_has_no_commit_field` |
 | H10 | none; a failed log flush latches revert | `write_failure_latches_and_retries` |
+| H11 | none; the bundle gate | `unsigned_is_rejected_and_the_monitor_stays` |
+| H12 | none; quarantine `must_hold` | `a_spec_that_flips_must_hold_is_refused` |
+| H13 | none; quarantine deadline | `an_over_deadline_eval_is_refused` |
+| H14 | none; active weights ignore the candidate | `a_candidate_weight_file_does_not_change_inference` |
+| H15 | none; a mid-swap fault latches revert | `a_fault_mid_swap_cannot_leave_the_command_path_on_the_new_spec` |
 
 Target identity, collateral, rules of engagement, tracker truth, and a fresh wrong estimate are not rows. This note does not turn them into assured decisions.

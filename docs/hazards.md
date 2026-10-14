@@ -16,10 +16,19 @@ A hazard enters this file before it enters the spec or a test. No new hazard wit
 | H8 | Interpreter load or `accept_event` error | Host latch on any `Err` | Revert, latched until process restart |
 | H9 | Setpoints and a mode change in the same tick | Switch type: `Command` is an enum, not two independent flags | Unreachable |
 | H10 | Log write failure in flight | Host latch on a failed flush | Revert, latched until process restart |
+| H11 | Unsigned reload | Bundle gate `unsigned_is_rejected_and_the_monitor_stays` | swap refused |
+| H12 | Fixture regression, including a learned threshold change inside the spec without a bundle | Quarantine `a_spec_that_flips_must_hold_is_refused` | swap refused |
+| H13 | Swap timeout, shadow eval over the deadline | Quarantine `an_over_deadline_eval_is_refused` | swap refused |
+| H14 | Learned weight file activated without a bundle | Active path `a_candidate_weight_file_does_not_change_inference` | swap refused |
+| H15 | Fault mid-swap | Host latch `a_fault_mid_swap_cannot_leave_the_command_path_on_the_new_spec` | Revert, latched until a spec has passed quarantine |
+
+A learned change to a threshold inside the spec, without a bundle that passes quarantine, is H12. It is a hazard, not a feature.
 
 ## Non-hazards
 
 These are not rows. A later task may not smuggle them in as if this list already covered them.
+
+Hot reload is not a non-hazard and it is not out of scope. Unsigned reload, fixture regression, swap timeout, a learned file without a bundle, and a fault mid-swap are H11 through H15.
 
 - Target identity.
 - Collateral.
