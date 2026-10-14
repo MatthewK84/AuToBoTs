@@ -69,16 +69,29 @@ impl ActivePath {
     }
 }
 
+pub struct SwapRequest<'a> {
+    pub bundle: &'a Bundle,
+    pub holds: &'a [HoldFixture<'a>],
+    pub recent: &'a str,
+    pub eval_us: u64,
+    pub deadline_us: u64,
+    pub tick: u64,
+    pub fault: bool,
+}
+
 pub fn quarantine_swap(
     active: &mut ActivePath,
-    bundle: &Bundle,
-    holds: &[HoldFixture<'_>],
-    recent: &str,
-    eval_us: u64,
-    deadline_us: u64,
-    tick: u64,
-    fault: bool,
+    request: SwapRequest<'_>,
 ) -> Result<SwapRecord, SwapError> {
+    let SwapRequest {
+        bundle,
+        holds,
+        recent,
+        eval_us,
+        deadline_us,
+        tick,
+        fault,
+    } = request;
     let command_before = active.spec.clone();
     let accepted = match accept(&active.spec, bundle) {
         Ok(spec) => spec,
@@ -164,8 +177,19 @@ mod tests {
             log: pass_log(),
             must_hold: true,
         }];
-        let err = quarantine_swap(&mut active, &bundle, &holds, "", 100, 5_000, 4, false)
-            .expect_err("flipped");
+        let err = quarantine_swap(
+            &mut active,
+            SwapRequest {
+                bundle: &bundle,
+                holds: &holds,
+                recent: "",
+                eval_us: 100,
+                deadline_us: 5_000,
+                tick: 4,
+                fault: false,
+            },
+        )
+        .expect_err("flipped");
         assert_eq!(err, SwapError::Fixture("must_hold"));
         assert_eq!(active.command_spec(), &before);
         assert!(!active.latched);
@@ -184,8 +208,19 @@ mod tests {
             log: pass_log(),
             must_hold: true,
         }];
-        let record =
-            quarantine_swap(&mut active, &bundle, &holds, "", 100, 5_000, 9, false).expect("swap");
+        let record = quarantine_swap(
+            &mut active,
+            SwapRequest {
+                bundle: &bundle,
+                holds: &holds,
+                recent: "",
+                eval_us: 100,
+                deadline_us: 5_000,
+                tick: 9,
+                fault: false,
+            },
+        )
+        .expect("swap");
         assert_eq!(record.tick, 9);
         assert_eq!(record.old_hash, spec.hash);
         assert_eq!(active.inference_weights(), b"from-bundle");
@@ -198,8 +233,19 @@ mod tests {
         let mut active = ActivePath::new(spec.clone());
         let before = active.command_spec().clone();
         let bundle = signed(&spec, &spec.text, None);
-        let err =
-            quarantine_swap(&mut active, &bundle, &[], "", 100, 5_000, 3, true).expect_err("fault");
+        let err = quarantine_swap(
+            &mut active,
+            SwapRequest {
+                bundle: &bundle,
+                holds: &[],
+                recent: "",
+                eval_us: 100,
+                deadline_us: 5_000,
+                tick: 3,
+                fault: true,
+            },
+        )
+        .expect_err("fault");
         assert_eq!(err, SwapError::Fault);
         assert_eq!(active.command_spec(), &before);
         assert!(active.latched);
@@ -215,8 +261,19 @@ mod tests {
         let mut active = ActivePath::new(spec.clone());
         let before = active.command_spec().clone();
         let bundle = signed(&spec, &spec.text, None);
-        let err = quarantine_swap(&mut active, &bundle, &[], "", 6_000, 5_000, 1, false)
-            .expect_err("deadline");
+        let err = quarantine_swap(
+            &mut active,
+            SwapRequest {
+                bundle: &bundle,
+                holds: &[],
+                recent: "",
+                eval_us: 6_000,
+                deadline_us: 5_000,
+                tick: 1,
+                fault: false,
+            },
+        )
+        .expect_err("deadline");
         assert_eq!(err, SwapError::Deadline);
         assert_eq!(active.command_spec(), &before);
     }
