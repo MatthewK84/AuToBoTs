@@ -1,0 +1,4 @@
+# recorded fixture stream. one buffer per line: at_ms bytes
+100 aabb
+150 ccdd
+200 1122
