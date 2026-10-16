@@ -7,3 +7,7 @@ publish = false
 description = "Frame ingress. Pipeline string and appsink. No command, no release path."
 
 [dependencies]
+
+[[bin]]
+name = "rta-tracker-timing"
+path = "src/bin/rta-tracker-timing.rs"

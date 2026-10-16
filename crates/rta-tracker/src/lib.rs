@@ -308,6 +308,19 @@ mod tests {
     }
 
     #[test]
+    fn hold_limit_was_not_raised() {
+        let sitl = include_str!("../../../config/sitl.toml");
+        let example = include_str!("../../../config/example.toml");
+        let note = include_str!("../../../docs/tracker-timing.md");
+        assert!(sitl.contains("tracker_hold_ms = 200"));
+        assert!(example.contains("tracker_hold_ms = 200"));
+        assert!(note.contains("udpsrc port=5600 ! decodebin ! appsink drop=true max-buffers=1"));
+        assert!(note.contains("2026-10-16"));
+        assert!(note.contains("The hold was not raised"));
+        assert!(note.contains("Issue 49 stays open"));
+    }
+
+    #[test]
     fn the_switch_has_no_video_dependency() {
         let switch = include_str!("../../rta-switch/Cargo.toml");
         let host = include_str!("../../rta-host/Cargo.toml");

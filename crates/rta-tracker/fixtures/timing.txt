@@ -1,0 +1,1 @@
+board=host-stand-in samples=10000 worst_us=15 wall_ms=0 date=2026-10-16
