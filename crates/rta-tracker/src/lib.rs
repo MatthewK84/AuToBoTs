@@ -149,6 +149,63 @@ pub fn port_sample(sink: &AppSink, now_ms: u64, hold_ms: u64) -> TrackPort {
     }
 }
 
+/// Range from bbox height is a stub. It is not a measured range.
+pub const RANGE_IS_A_STUB: &str = "range is a stub from bbox height and focal length";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Detection {
+    pub confidence: f64,
+    pub bbox_height_px: f64,
+    pub sample_time_ms: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Focal {
+    pub length_px: f64,
+    pub target_height_m: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Presented {
+    pub track_conf: f64,
+    pub spec_range_m: Option<f64>,
+    pub logged_range_m: Option<f64>,
+}
+
+pub fn range_stub(bbox_height_px: f64, focal: Focal) -> f64 {
+    if bbox_height_px <= 0.0 || focal.length_px <= 0.0 {
+        return 0.0;
+    }
+    (focal.length_px * focal.target_height_m / bbox_height_px).max(0.0)
+}
+
+/// One track behind the sink. Fields match `InputRecord`: confidence in 0..=1, range non-negative.
+pub fn emit(detection: Detection, focal: Focal) -> TrackPort {
+    TrackPort {
+        track_conf: detection.confidence.clamp(0.0, 1.0),
+        range_m: range_stub(detection.bbox_height_px, focal),
+        sample_time_ms: detection.sample_time_ms,
+        age_ms: 0,
+    }
+}
+
+/// M2.2 hold policy. Not a second policy: unseen or older than the hold is confidence 0.
+pub fn present(track: &TrackPort, now_ms: u64, hold_ms: u64, ever_seen: bool) -> Presented {
+    let age_ms = now_ms.saturating_sub(track.sample_time_ms) as f64;
+    if !ever_seen || age_ms > hold_ms as f64 {
+        return Presented {
+            track_conf: 0.0,
+            spec_range_m: None,
+            logged_range_m: if ever_seen { Some(track.range_m) } else { None },
+        };
+    }
+    Presented {
+        track_conf: track.track_conf,
+        spec_range_m: Some(track.range_m),
+        logged_range_m: Some(track.range_m),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,6 +249,62 @@ mod tests {
         assert_eq!(err, PipelineError::MissingSource);
         let missing = port_sample(&AppSink::default(), 10, 200);
         assert_eq!(missing.track_conf, 0.0);
+    }
+
+    #[test]
+    fn port_fields_match_input_record() {
+        let track = emit(
+            Detection {
+                confidence: 1.4,
+                bbox_height_px: 20.0,
+                sample_time_ms: 100,
+            },
+            Focal {
+                length_px: 800.0,
+                target_height_m: 1.0,
+            },
+        );
+        assert!((0.0..=1.0).contains(&track.track_conf));
+        assert!(track.range_m >= 0.0);
+        assert_eq!(track.range_m, 40.0);
+        assert!(RANGE_IS_A_STUB.contains("stub"));
+    }
+
+    #[test]
+    fn stale_detector_output_uses_the_hold_policy() {
+        let track = emit(
+            Detection {
+                confidence: 0.8,
+                bbox_height_px: 20.0,
+                sample_time_ms: 100,
+            },
+            Focal {
+                length_px: 800.0,
+                target_height_m: 1.0,
+            },
+        );
+        let fresh = present(&track, 150, 200, true);
+        assert_eq!(fresh.track_conf, 0.8);
+        assert_eq!(fresh.spec_range_m, Some(40.0));
+        let stale = present(&track, 400, 200, true);
+        assert_eq!(stale.track_conf, 0.0);
+        assert_eq!(stale.spec_range_m, None);
+        assert_eq!(stale.logged_range_m, Some(40.0));
+        let unseen = present(&track, 100, 200, false);
+        assert_eq!(unseen.track_conf, 0.0);
+        assert_eq!(unseen.logged_range_m, None);
+    }
+
+    #[test]
+    fn no_path_from_a_frame_to_decide() {
+        let cargo = include_str!("../Cargo.toml");
+        assert!(!cargo.contains("rta-switch"));
+        assert!(!cargo.contains("gstreamer"));
+        let contract = include_str!("lib.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("contract");
+        assert!(!contract.contains("decide"));
     }
 
     #[test]

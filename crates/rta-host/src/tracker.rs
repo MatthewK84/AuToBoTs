@@ -32,6 +32,14 @@ impl Tracker for FakeTracker {
     }
 }
 
+/// The only crossing from a detector. No frame bytes cross this function.
+pub fn accept(sample: TrackSample) -> Option<TrackSample> {
+    if !(0.0..=1.0).contains(&sample.confidence) || sample.range_m < 0.0 {
+        return None;
+    }
+    Some(sample)
+}
+
 pub fn weak_inside_commit(sample_time_ms: u64) -> TrackSample {
     TrackSample {
         confidence: 0.2,
@@ -43,6 +51,23 @@ pub fn weak_inside_commit(sample_time_ms: u64) -> TrackSample {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_port_does_not_carry_a_frame() {
+        let contract = include_str!("tracker.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("contract");
+        assert!(!contract.contains("appsink"));
+        assert!(!contract.contains("Buffer"));
+        assert!(!contract.contains("decide"));
+        let accepted = accept(TrackSample {
+            confidence: 0.4,
+            range_m: 12.0,
+            sample_time_ms: 10,
+        });
+        assert!(accepted.is_some());
+    }
 
     #[test]
     fn fake_emits_a_weak_track_inside_commit_range() {
