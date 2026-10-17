@@ -317,7 +317,8 @@ mod tests {
         assert!(note.contains("udpsrc port=5600 ! decodebin ! appsink drop=true max-buffers=1"));
         assert!(note.contains("2026-10-16"));
         assert!(note.contains("The hold was not raised"));
-        assert!(note.contains("Issue 49 stays open"));
+        assert!(note.contains("production-test hook"));
+        assert!(note.contains("The hold does not grow"));
     }
 
     #[test]

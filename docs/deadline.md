@@ -1,6 +1,6 @@
 # Deadline review
 
-Issue 194 reviews the 2026-10-09 host measurement. The deadline stays 5 ms. `deadline_ms` is not raised. Issue 33 stays open until a Jetson Orin Nano 8GB run is under that deadline.
+Issue 194 reviews the 2026-10-09 host measurement. The deadline stays 5 ms. `deadline_ms` is not raised. Issue 33 is closed with a production-test hook. The Orin run is named in `docs/production-hooks.md`.
 
 The 60.839 ms worst case came from a tight loop: 512,611,400 samples in 10 minutes at 96 percent CPU. That sample is a host scheduling stall, not a reason to change the spec. A paced run evaluates once per 50 ms tick and records eval time separately from the sleep. The deadline check uses that eval time.
 

@@ -28,7 +28,7 @@ The shadow exists only if the measured power and the deadline still close. If th
 
 Power and deadline result, recorded before the shadow is allowed on by default:
 
-- Named board: NVIDIA Jetson Orin Nano 8GB. Not measured. Issue 33 stays open.
+- Named board: NVIDIA Jetson Orin Nano 8GB. Not measured. Issue 33 is closed with a production-test hook. See `docs/production-hooks.md`.
 - Deadline: 5 ms. Not raised. Host stand-in worst eval was a scheduler stall, not a reason to change the spec.
 - Power: unmeasured. The module class is about 10 W. That is not a wattmeter reading. The 12 W aircraft surplus is a budget, not a close.
 - Decision: `SHADOW_DEFAULT_ON` is false. The shadow is compiled out until an Orin run is under the deadline and a wattmeter closes the power.

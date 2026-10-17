@@ -58,7 +58,7 @@ These are listed. They are not folded into a compliance sentence.
 
 ### M12.2 Weight pin and budget
 
-[Shadow network](../shadow-net.md). Weights are a file with a recorded hash. Load failure keeps the primary. The shadow exists only if the measured power and the deadline still close. The named board is the Orin Nano. That measurement is missing. The deadline is not raised. See [target](../target.md) and [deadline](../deadline.md). Issue 33 stays open.
+[Shadow network](../shadow-net.md). Weights are a file with a recorded hash. Load failure keeps the primary. The shadow exists only if the measured power and the deadline still close. The named board is the Orin Nano. That measurement is missing. The deadline is not raised. See [target](../target.md) and [deadline](../deadline.md). Issue 33 is closed with a production-test hook. See `docs/production-hooks.md`.
 
 ### M13 Learning and spec hot reload
 
@@ -70,6 +70,6 @@ These are listed. They are not folded into a compliance sentence.
 
 ## Other open measurements
 
-- [Tracker timing](../tracker-timing.md). Issue 49 stays open until the Orin decode-plus-detect run.
+- [Tracker timing](../tracker-timing.md). Issue 49 is closed with a production-test hook. See `docs/production-hooks.md`.
 - Evidence artifacts, when a tag build produces them: SBOM and provenance record.
 - SITL and scripted trips are developmental test evidence. They are not operational test.
