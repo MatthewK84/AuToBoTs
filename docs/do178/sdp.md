@@ -12,7 +12,7 @@ DO-178C is the development guidance named here. The Parasoft ebook names Table A
 
 The switch is a pure decision function. It does not link an interpreter, MAVLink, or a release actuator. The monitor loads the RTLola spec once and evaluates a tick. The complex function proposes a setpoint. The switch accepts or rejects it.
 
-Standards in use are the Rust style guide and `rustfmt`. Public items carry doc comments. A missing doc sentence that this file requires fails the planning test.
+Standards in use are the Rust style guide, `rustfmt`, and the JSF Air Vehicle baseline in `docs/jsf-av.md` (2RDU00001 Rev C). Public items carry doc comments. A missing doc sentence that this file requires fails the planning test.
 
 ## Hazards
 
