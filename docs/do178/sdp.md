@@ -6,7 +6,7 @@ This is a repository planning document. It is not a certification claim.
 
 The software-level choice is in `docs/do178/psac.md`. It is a project choice, not an authority finding. The switch and the monitor are recommended at DO-178C Level C. The untrusted complex function is recommended at Level E. The split is the point of ASTM F3269-21.
 
-DO-178C is the development guidance named here. DO-333 is named for the formal-methods hook on `decide` and on the RTLola replay. Objective identifiers are not cited from memory. The identifiers in hand are listed in the PSAC.
+DO-178C is the development guidance named here. The Parasoft ebook names Table A-2 for the software development process: requirements, design, coding, and integration. DO-333 is named for the formal-methods hook on `decide` and on the RTLola replay. Objective identifiers are not cited from memory. The documents in hand are listed in the PSAC.
 
 ## Development
 

@@ -5,7 +5,7 @@ These milestones were out of scope for M0–M10. They are in scope now because t
 Public documents named here:
 
 - ASTM F3269-21, Standard Practice for Methods to Safely Bound Behavior of Aircraft Systems Containing Complex Functions Using Run-Time Assurance.
-- RTCA DO-178C, Software Considerations in Airborne Systems and Equipment Certification, and DO-333, Formal Methods Supplement to DO-178C and DO-278A.
+- RTCA DO-178C, Software Considerations in Airborne Systems and Equipment Certification; DO-330, Software Tool Qualification Considerations; and DO-333, Formal Methods Supplement to DO-178C and DO-278A. DO-178C and DO-330 are not public in full. The documents in hand are Parasoft, *DO-178C Software Compliance for Aerospace & Defense*, and Holloway and Graydon, *Explicate '78*, DOT/FAA/TC-17/67, January 2018.
 - DoD Directive 3000.09, Autonomy in Weapon Systems, 25 January 2023. Cleared for public release. Policy is that autonomous and semi-autonomous weapon systems are designed so commanders and operators can exercise appropriate human judgment over the use of force, and that a system unable to complete an engagement inside the commanded constraints terminates the engagement or obtains additional operator input.
 - Control-barrier and backup-controller safety filters as published in the open literature (Ames et al., and the backup-set formulations flown on small quadrotors and on VISTA).
 
@@ -270,7 +270,14 @@ Depends on: M1.1, M10.3.
 
 Write the planning set as repository documents, not as a certification claim. PSAC, SDP, SVP, SCMP, SQA plan, in `docs/do178/`. Software level is chosen in the PSAC and justified. Start the recommendation at Level C for the switch and the monitor, and Level D or E for the untrusted complex function, and record that the split is the point of ASTM F3269. The applicant, if any, can raise the level. This repository does not.
 
-Name DO-178C and DO-333. DO-333 is the hook for the Kani results on `decide` and for the RTLola replay argument. Do not cite an objective table from memory; quote the objective identifiers from the document in hand when the plans are written.
+Name DO-178C, DO-330, and DO-333. DO-333 is the hook for the Kani results on `decide` and for the RTLola replay argument. Do not cite an objective table from memory. Quote only from a document in hand.
+
+Documents in hand, written into the PSAC:
+
+- Parasoft, *DO-178C Software Compliance for Aerospace & Defense*. It names Tables A-1 through A-10 and the seven Table A-1 objectives for levels A through D. It is a vendor guide, not the standard.
+- Holloway and Graydon, *Explicate '78: Assurance Case Applicability to Digital Systems*, DOT/FAA/TC-17/67, January 2018. It quotes DO-178C §12.2.2 Criteria 1, 2, and 3, and states that DO-330 provides tool qualification guidance.
+
+The DO-333 annex tables are not in hand. No FM.A objective identifier is cited.
 
 Acceptance:
 
@@ -285,7 +292,7 @@ Depends on: M16.1, M8.1, M7.3.
 
 Bidirectional trace: hazard to requirement to spec stream or switch invariant to test to result. Generated from tags in the tests so a missing tag fails CI. Verification results are the CI log plus the Kani log, stored as artifacts named in the SVP.
 
-Tool qualification is a note, not a claim. `rtlola-interpreter` and Kani are not qualified tools until a qualification kit exists. The note says which objectives therefore still need review or an independent test.
+Tool qualification is a note, not a claim. DOT/FAA/TC-17/67 quotes DO-178C §12.2.2. `rtlola-interpreter` and Kani automate verification and could fail to detect an error, so they are Criterion 2 or 3. Neither has a qualification kit. The note says which objectives therefore still need review or an independent test.
 
 Acceptance:
 
