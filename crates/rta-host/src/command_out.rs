@@ -1,10 +1,12 @@
 //! Outbound commands. Mode and setpoints are separate messages. Idle sends nothing.
 
 use mavlink::dialects::common::{
-    MavCmd, MavMessage, PositionTargetTypemask, COMMAND_LONG_DATA,
-    SET_POSITION_TARGET_LOCAL_NED_DATA,
+    MavCmd, MavMessage, MavSeverity, PositionTargetTypemask, COMMAND_LONG_DATA,
+    SET_POSITION_TARGET_LOCAL_NED_DATA, STATUSTEXT_DATA,
 };
+use mavlink::types::CharArray;
 use rta_spec::RecoveryMode;
+use rta_switch::authority::{indication_line, Indication};
 use rta_switch::SwitchCommand;
 
 pub fn to_message(command: &SwitchCommand, target_system: u8) -> Option<MavMessage> {
@@ -63,6 +65,24 @@ pub fn reported_mode(custom_mode: u32) -> Option<RecoveryMode> {
         4 => Some(RecoveryMode::Land),
         _ => None,
     }
+}
+
+/// Indication on the link this adapter already owns. No second link.
+pub fn indication_message(shown: Indication) -> MavMessage {
+    let line = indication_line(shown);
+    let bytes = line.as_bytes();
+    let mut text = [0u8; 50];
+    let n = bytes.len().min(50);
+    text[..n].copy_from_slice(&bytes[..n]);
+    let severity = if shown == Indication::Reverted {
+        MavSeverity::MAV_SEVERITY_WARNING
+    } else {
+        MavSeverity::MAV_SEVERITY_NOTICE
+    };
+    MavMessage::STATUSTEXT(STATUSTEXT_DATA {
+        severity,
+        text: CharArray::new(text),
+    })
 }
 
 #[cfg(test)]

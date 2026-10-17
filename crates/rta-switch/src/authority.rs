@@ -153,6 +153,14 @@ pub enum Indication {
     Reverted,
 }
 
+/// A `Revert` indication cannot be overwritten by a grant in the same tick.
+pub fn indication_for_tick(verdict_is_revert: bool, decision: CommitDecision) -> Indication {
+    if verdict_is_revert {
+        return Indication::Reverted;
+    }
+    indication(decision)
+}
+
 pub fn indication(decision: CommitDecision) -> Indication {
     match decision {
         CommitDecision::Commit => Indication::CommitArmed,
@@ -363,6 +371,24 @@ mod tests {
         assert!(doc.contains("terminate the engagement or obtain additional operator input"));
         assert!(doc.contains("does not implement a weapon, a fuze, or a release actuator"));
         assert!(doc.contains("not a compliance claim"));
+    }
+
+    #[test]
+    fn a_revert_indication_is_not_overwritten_by_a_grant_in_the_same_tick() {
+        let granted = CommitDecision::Commit;
+        let shown = indication_for_tick(true, granted);
+        assert_eq!(shown, Indication::Reverted);
+        assert_ne!(shown, Indication::CommitArmed);
+    }
+
+    #[test]
+    fn every_reason_code_is_in_the_indication_table() {
+        let hmi = include_str!("../../../docs/hmi.md");
+        for code in REASON_CODES {
+            assert!(hmi.contains(&format!("`{code}`")), "{code}");
+        }
+        assert!(hmi.contains("no second link"));
+        assert!(hmi.contains("STATUSTEXT"));
     }
 
     #[test]
