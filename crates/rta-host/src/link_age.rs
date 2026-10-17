@@ -43,6 +43,7 @@ mod tests {
     use super::*;
 
     #[test]
+    // trace: H3
     fn silent_gap_over_the_spec_limit_is_stale() {
         let age = LinkAge::new();
         assert!(age.age_ms(400) > 300.0);

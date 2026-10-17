@@ -70,6 +70,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H5
     fn fake_emits_a_weak_track_inside_commit_range() {
         let mut tracker = FakeTracker::script(vec![weak_inside_commit(10)]);
         let sample = tracker.sample().unwrap();

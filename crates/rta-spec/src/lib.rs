@@ -210,6 +210,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H6
     fn rejects_non_finite_confidence_and_negative_age() {
         assert!(InputRecord::try_new(f64::NAN, true, 0.0, 0.5, 1.0, 0.0, 0.0).is_err());
         assert!(InputRecord::try_new(1.0, true, 0.0, 0.5, f64::INFINITY, 0.0, 0.0).is_err());

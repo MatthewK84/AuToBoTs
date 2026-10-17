@@ -10,7 +10,9 @@ DO-178C is the verification guidance named here. The Parasoft ebook names Tables
 
 ## Verification
 
-CI runs `cargo fmt`, `cargo clippy`, `cargo test`, and the golden replay. Kani covers `decide`. Replay covers the monitor spec. A missing hazard tag is a verification gap, owned by M16.2.
+CI runs `cargo fmt`, `cargo clippy`, `cargo test`, and the golden replay. Kani covers `decide`. Replay covers the monitor spec.
+
+Verification results are stored as named artifacts. The CI log is the `main ci` GitHub Actions run, named `ci-log` in `docs/do178/trace.md`. The Kani log is the output of `cargo kani -p rta-switch`, named `kani-log` in `docs/kani.md`. A missing hazard tag is a verification gap. `untraced` fails CI on it.
 
 ## Hazards
 

@@ -166,6 +166,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H12
     fn a_spec_that_flips_must_hold_is_refused() {
         let spec = running();
         let mut active = ActivePath::new(spec.clone());
@@ -196,6 +197,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H14
     fn a_candidate_weight_file_does_not_change_inference() {
         let spec = running();
         let mut active = ActivePath::new(spec.clone());
@@ -228,6 +230,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H15
     fn a_fault_mid_swap_cannot_leave_the_command_path_on_the_new_spec() {
         let spec = running();
         let mut active = ActivePath::new(spec.clone());
@@ -256,6 +259,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H13
     fn an_over_deadline_eval_is_refused() {
         let spec = running();
         let mut active = ActivePath::new(spec.clone());

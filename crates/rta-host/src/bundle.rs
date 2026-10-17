@@ -111,6 +111,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H11
     fn unsigned_is_rejected_and_the_monitor_stays() {
         let running = running();
         let before = running.clone();

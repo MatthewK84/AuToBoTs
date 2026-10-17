@@ -88,6 +88,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H1
     fn margin_band_is_not_ok() {
         let fence = square();
         assert!(!fence_ok([1.0, 100.0], 20.0, fence));

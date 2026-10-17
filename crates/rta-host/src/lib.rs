@@ -25,6 +25,7 @@ pub mod spec;
 pub mod stale;
 pub mod tick;
 pub mod tick_log;
+pub mod trace;
 pub mod tracker;
 pub mod watchdog;
 pub mod weights;

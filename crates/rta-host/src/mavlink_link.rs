@@ -181,6 +181,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H2
     fn position_resets_fix_age() {
         let mut state = VehicleState::default();
         apply(&mut state, &Inbound::Position { alt_mm: 1_500 }, 40);

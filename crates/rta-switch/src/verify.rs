@@ -34,6 +34,7 @@ fn any_request() -> Option<Request> {
 }
 
 #[kani::proof]
+// trace: H9
 fn decide_variants_are_exclusive() {
     let verdict = any_verdict();
     let request = any_request();

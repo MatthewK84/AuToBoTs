@@ -84,6 +84,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H7
     fn late_tick_discards_pass() {
         let mut host = FailClosed::default();
         let command = host.command(case(Some(Verdict::Pass), true, Some(0.0), true));
@@ -92,6 +93,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H8
     fn fault_stays_revert() {
         let mut host = FailClosed {
             faulted: true,
@@ -103,6 +105,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H4
     fn missing_heartbeat_is_stale() {
         let mut host = FailClosed::default();
         assert!(matches!(
@@ -112,6 +115,7 @@ mod tests {
     }
 
     #[test]
+    // trace: H10
     fn write_failure_latches_and_retries() {
         let mut host = FailClosed::default();
         let first = host.command(case(Some(Verdict::Revert), false, Some(0.0), false));
