@@ -28,3 +28,7 @@ Swap is not immediate. The candidate is built beside the running spec and replay
 A fault mid-swap latches `Revert` and cannot leave the command path on the new spec. There is no public `clear_fault`. The latch clears only when the process is on a spec that has passed quarantine.
 
 On-aircraft learning may write a candidate weight file. It may not point the active path at that file. Inference keeps using the active weights. Activation is a bundle swap. A successful swap logs the old hash, the new hash, and the tick number.
+
+## Index
+
+A successful swap is a new row in `docs/do178/sci.md`, not an edit to an old row. The index updates in the same change as the swap. A swap that lands without that row is incomplete.
