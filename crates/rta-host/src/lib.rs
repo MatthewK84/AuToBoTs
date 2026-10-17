@@ -15,6 +15,7 @@ pub mod mavlink_link;
 pub mod mode;
 pub mod monitor;
 pub mod operator;
+pub mod packet;
 pub mod planning;
 pub mod quarantine;
 pub mod read;
