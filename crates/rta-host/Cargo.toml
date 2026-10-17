@@ -10,6 +10,7 @@ name = "rta-host"
 path = "src/main.rs"
 
 [dependencies]
+sha2 = { version = "0.10", default-features = false }
 rta-spec = { path = "../rta-spec", version = "0.1.0" }
 rta-switch = { path = "../rta-switch", version = "0.1.0" }
 rta-filter = { path = "../rta-filter", version = "0.1.0" }

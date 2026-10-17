@@ -16,6 +16,8 @@ The software level is a project choice, not an authority finding. Level C for th
 
 ## Trace
 
+- [Configuration index](sci.md)
+
 - [Hazard trace](trace.md)
 - [Hazard table](../hazards.md)
 - [Kani log name](../kani.md)

@@ -1,7 +1,18 @@
 //! Software configuration index. Hashes, not branch tips.
 
+use sha2::{Digest, Sha256};
+
+/// Recorded spec hash against the file on disk. Drift fails CI.
+pub fn spec_hash_matches(index: &str, spec: &str) -> bool {
+    let digest = Sha256::digest(spec.as_bytes());
+    let hex = format!("{digest:x}");
+    index.contains(&hex)
+}
+
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::PathBuf;
     #[test]
     fn the_index_names_hashes_and_the_swap_updates_it() {
         let index = include_str!("../../../docs/do178/sci.md");
@@ -16,5 +27,16 @@ mod tests {
         assert!(bundle.contains("same change as the swap"));
         assert!(index.contains("rtlola-interpreter"));
         assert!(index.contains("0.11.0"));
+    }
+
+    #[test]
+    fn tampering_with_the_spec_without_updating_the_index_fails() {
+        let index = include_str!("../../../docs/do178/sci.md");
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../spec/monitor.lola");
+        let spec = fs::read_to_string(path).unwrap();
+        assert!(super::spec_hash_matches(index, &spec));
+        assert!(!super::spec_hash_matches(index, "tampered"));
+        let packet = include_str!("../../../docs/do178/ao-packet.md");
+        assert!(packet.contains("sci.md"));
     }
 }

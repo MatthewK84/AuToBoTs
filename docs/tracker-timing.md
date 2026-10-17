@@ -14,4 +14,4 @@ The measurement ran on the build host, not on the Orin. 10,000 detector-stub sam
 
 Hold limit: 200 ms, from `config/sitl.toml` and `config/example.toml`. The hold was not raised. M2.2 was not revised.
 
-Issue 49 stays open until a decode-plus-detect measurement on the Orin Nano is under that hold, or the pipeline is simplified or the detector is replaced on that board. The hold does not grow to hide a miss.
+Issue 49 is closed with a production-test hook. The Orin decode-plus-detect run is named in `docs/production-hooks.md`. The hold does not grow to hide a miss.
