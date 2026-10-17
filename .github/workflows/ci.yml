@@ -14,9 +14,9 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-      - run: cargo run -q -p rta-host --bin rta-replay -- crates/rta-host/fixtures/golden spec/monitor.lola
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo test --locked --workspace
+      - run: cargo run --locked -q -p rta-host --bin rta-replay -- crates/rta-host/fixtures/golden spec/monitor.lola
   evidence:
     runs-on: ubuntu-latest
     steps:

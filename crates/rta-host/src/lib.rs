@@ -14,6 +14,7 @@ pub mod jsf;
 pub mod learning_hazards;
 pub mod link;
 pub mod link_age;
+pub mod lockfile;
 pub mod mavlink_link;
 pub mod mode;
 pub mod monitor;

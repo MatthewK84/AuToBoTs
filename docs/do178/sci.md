@@ -11,6 +11,8 @@ This is a configuration index. It names hashes, not floating branch tips. It is 
 | Switch crate last change | `802feaa2f982b53f46f237e78804e47a4c014aff` |
 | Config `config/example.toml` | `d6bdf2dddc6753beede60dc65731cf8bb06a49a355c90eccf802abe181bc2342` |
 | Rust toolchain | `1.98.1` |
+| `Cargo.lock` | `027980cfa3172e81caf11d75f9a5a73d262fd5a698118d2aa4ff9363215e1e26` |
+| Runner image | `ubuntu-latest`, floating. Gap. |
 | `rtlola-interpreter` | `0.11.0` |
 | `rtlola-frontend` | `0.8.0` |
 | `mavlink` | `0.18.0` |
@@ -24,7 +26,8 @@ Tool versions are from `docs/dependencies.md`. The switch content hash is the ha
 - M12.2: the shadow exists only if power and deadline still close. The Orin measurement is missing. The deadline is not raised.
 - M13: on-aircraft learning is gated by a bundle. It is not a claim that a learned change is safe.
 - M16.2 and M17: `rtlola-interpreter` and Kani are not qualified tools. See `docs/do178/tool-qualification.md`.
-- Issue 33 and issue 49 stay open for the Orin runs.
+- Issue 33 and issue 49 are closed with a production-test hook. See `docs/production-hooks.md`.
+- The runner image is `ubuntu-latest`. It is floating. It cannot be pinned to a digest yet. Two runs of one commit still hash the same `Cargo.lock`.
 
 ## Bundle swap
 
