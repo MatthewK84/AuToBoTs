@@ -67,6 +67,40 @@ mod tests {
     }
 
     #[test]
+    fn eval_thread_killed_and_watchdog_sends_mode_without_the_interpreter() {
+        use std::sync::mpsc;
+        use std::thread;
+        let (tx, rx) = mpsc::channel::<()>();
+        let eval = thread::spawn(move || {
+            let _ = rx.recv();
+        });
+        drop(tx);
+        eval.join().unwrap();
+        let mut watchdog = Watchdog::new(100, 2);
+        watchdog.publish(0);
+        let mut sender = ModeSender::default();
+        let mut sink = Vec::new();
+        watchdog.check(
+            200,
+            RecoveryMode::Loiter,
+            RecoveryMode::Rtl,
+            &mut sender,
+            &mut sink,
+        );
+        assert!(sink.iter().any(|line| line.contains("mode")));
+        let source = include_str!("watchdog.rs");
+        let interpreter = ["rt", "lola"].concat();
+        let filter = ["rta_", "filter"].concat();
+        let tracker = ["rta_", "tracker"].concat();
+        assert!(!source.contains(&interpreter));
+        assert!(!source.contains(&filter));
+        assert!(!source.contains(&tracker));
+        let note = include_str!("../../../docs/watchdog.md");
+        assert!(note.contains("Socket"));
+        assert!(note.contains("Clock"));
+    }
+
+    #[test]
     fn watchdog_does_not_name_the_interpreter() {
         let source = include_str!("watchdog.rs");
         let interpreter = ["rt", "lola"].concat();
