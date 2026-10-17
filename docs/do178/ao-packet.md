@@ -62,9 +62,9 @@ These are listed. They are not folded into a compliance sentence.
 
 [Reload bundle](../reload-bundle.md). An unsigned reload, a fixture regression, a swap timeout, a learned file without a bundle, and a fault mid-swap are H11 through H15. They are hazards. On-aircraft learning is gated by the bundle. It is not a claim that a learned change is safe.
 
-### M16.2 Tool qualification
+### M16.2 and M17.2 Tool qualification
 
-[Tool qualification](tool-qualification.md). `rtlola-interpreter` and Kani automate verification and could fail to detect an error. DOT/FAA/TC-17/67 quotes DO-178C §12.2.2. They are Criterion 2 or 3. Neither has a qualification kit. Replay and Kani are evidence. They are not qualified-tool results. Those objectives still need review or an independent test.
+[Tool qualification](tool-qualification.md). M17.2 names the independent check for each unqualified tool. `rtlola-interpreter` and Kani automate verification and could fail to detect an error. DOT/FAA/TC-17/67 quotes DO-178C §12.2.2. They are Criterion 2 or 3. Neither has a qualification kit. Replay and Kani are evidence. They are not qualified-tool results. Those objectives still need review or an independent test.
 
 ## Other open measurements
 
