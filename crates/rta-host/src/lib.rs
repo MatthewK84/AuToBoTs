@@ -26,6 +26,7 @@ pub mod spec;
 pub mod stale;
 pub mod tick;
 pub mod tick_log;
+pub mod tools;
 pub mod trace;
 pub mod tracker;
 pub mod watchdog;
