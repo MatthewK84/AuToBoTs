@@ -1,3 +1,4 @@
+# Reviewed parameter item. Not a flight file.
 [link]
 endpoint = "udp:127.0.0.1:14540"
 system_id = 1

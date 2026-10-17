@@ -9,7 +9,7 @@ This is a configuration index. It names hashes, not floating branch tips. It is 
 | Spec `spec/monitor.lola` | `ae398e85f30cd1e8723bbef36ad934b3651017e6d987eeedbc7fddf229bd6553` |
 | Switch crate content | `8ef36e2c13b88ae726738d52da06723be20e7ad52127db46f0b8b069dfb052ac` |
 | Switch crate last change | `802feaa2f982b53f46f237e78804e47a4c014aff` |
-| Config `config/example.toml` | `d6bdf2dddc6753beede60dc65731cf8bb06a49a355c90eccf802abe181bc2342` |
+| Config `config/example.toml` | `518d4494221123a1cc9e8069fcc7c618ec090759e719cde79478938f68406622` |
 | Rust toolchain | `1.98.1` |
 | `Cargo.lock` | `027980cfa3172e81caf11d75f9a5a73d262fd5a698118d2aa4ff9363215e1e26` |
 | Runner image | `ubuntu-latest`, floating. Gap. |
@@ -19,6 +19,10 @@ This is a configuration index. It names hashes, not floating branch tips. It is 
 | `kani-verifier` | `0.68.0` |
 
 Tool versions are from `docs/dependencies.md`. The switch content hash is the hash of the crate sources. The last-change value is the commit that last touched the crate. Neither is a branch tip.
+
+## Parameter data
+
+`config/example.toml` is the reviewed parameter item. It is not a flight file. A flight config that differs from it is a named file with its own hash in this index, not an untracked edit. Unknown keys fail closed.
 
 ## Known gaps
 
