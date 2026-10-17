@@ -52,4 +52,6 @@ The grant arrives on the existing link as a line the adapter parses into the tok
 
 A flight-controller heartbeat or `SET_MODE` is a mode change. The adapter does not invent a grant from it.
 
+indication is logged. three_sink_cases_are_asserted_from_the_log. 1.2.a.
+
 The operator indication is a logged line: `commit_armed`, `commit_inhibited` with a reason code, or `reverted`. Reason codes are the trigger names `fence`, `fix`, `link`, `heartbeat`, `weak_track`, plus `no_grant`, `grant_expired`, `grant_revoked`, and `fence_hash`.

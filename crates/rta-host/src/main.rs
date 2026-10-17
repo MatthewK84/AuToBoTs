@@ -113,6 +113,7 @@ fn main() -> ExitCode {
         eval_ms: 0,
         spec_hash,
         alt_m: 0.0,
+        indication: String::new(),
     };
     if tick_log.append(&record_line).is_err() {
         let _latched = tick_log::on_write_error();

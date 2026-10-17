@@ -117,6 +117,7 @@ fn main() -> ExitCode {
         eval_ms: 1,
         spec_hash: 0,
         alt_m: 30.0,
+        indication: String::new(),
     };
     if log.append(&line).is_err() {
         eprintln!("sitl: log write failed");

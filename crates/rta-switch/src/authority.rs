@@ -221,6 +221,11 @@ pub const AUTHORITY_TRACE: &[TraceRow] = &[
         test: "a_mode_change_is_not_a_grant",
         policy: "1.2.a",
     },
+    TraceRow {
+        conjunct: "indication is logged",
+        test: "three_sink_cases_are_asserted_from_the_log",
+        policy: "1.2.a",
+    },
 ];
 
 fn pin(bytes: &[u8]) -> u64 {

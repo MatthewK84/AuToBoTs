@@ -140,6 +140,7 @@ fn parse_record(line: &str) -> Result<TickRecord, &'static str> {
         eval_ms,
         spec_hash,
         alt_m,
+        indication: String::new(),
     })
 }
 

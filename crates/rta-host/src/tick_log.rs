@@ -25,6 +25,7 @@ pub struct TickRecord {
     pub eval_ms: u64,
     pub spec_hash: u64,
     pub alt_m: f64,
+    pub indication: String,
 }
 
 pub struct TickLog<W: Write> {
@@ -60,7 +61,7 @@ impl<W: Write> TickLog<W> {
         let reasons = record.reasons.join(",");
         writeln!(
             self.writer,
-            "tick={} fence_ok={} fix_age_ms={} link_age_ms={} fc_heartbeat_age_ms={} track_conf={} range_m={} verdict={} filter_intervened={} reasons={} command={} eval_ms={} spec_hash={:016x}",
+            "tick={} fence_ok={} fix_age_ms={} link_age_ms={} fc_heartbeat_age_ms={} track_conf={} range_m={} verdict={} filter_intervened={} reasons={} command={} eval_ms={} spec_hash={:016x} indication={}",
             record.tick,
             record.fence_ok as u8,
             record.fix_age_ms,
@@ -74,6 +75,7 @@ impl<W: Write> TickLog<W> {
             record.command,
             record.eval_ms,
             record.spec_hash,
+            record.indication,
         )?;
         self.since_flush += 1;
         if self.since_flush >= self.every {
@@ -143,7 +145,37 @@ mod tests {
             eval_ms: 1,
             spec_hash: 7,
             alt_m: 0.0,
+            indication: "indication=commit_inhibited reason=weak_track".into(),
         }
+    }
+
+    #[test]
+    fn three_sink_cases_are_asserted_from_the_log() {
+        use rta_switch::authority::{
+            indication, indication_for_tick, indication_line, AuthorityReason, CommitDecision,
+        };
+        let cases = [
+            indication(CommitDecision::Inhibit(AuthorityReason::NoGrant)),
+            indication_for_tick(true, CommitDecision::Commit),
+            indication(CommitDecision::Inhibit(AuthorityReason::Revoked)),
+        ];
+        let mut buf = Vec::new();
+        let mut log = TickLog::from_writer(&mut buf, 1);
+        for (tick, shown) in cases.iter().enumerate() {
+            let mut record = sample();
+            record.tick = tick as u64;
+            record.indication = indication_line(*shown);
+            log.append(&record).unwrap();
+        }
+        let text = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].contains("indication=commit_inhibited reason=no_grant"));
+        assert!(!lines[0].contains("indication=reverted"));
+        assert!(lines[1].contains("indication=reverted"));
+        assert!(!lines[1].contains("commit_armed"));
+        assert!(lines[2].contains("indication=commit_inhibited reason=grant_revoked"));
+        assert!(!lines[2].contains("indication=commit_armed"));
     }
 
     #[test]
