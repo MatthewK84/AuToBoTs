@@ -13,7 +13,7 @@ LLVM_PROFILE_FILE="target/switch-test.profraw" "$bin" --test-threads=8 >/dev/nul
 llvm-profdata merge -sparse target/switch-test.profraw -o target/switch.profdata
 mkdir -p target/coverage
 llvm-cov report --instr-profile=target/switch.profdata --ignore-filename-regex='cargo/registry|rustlib' "$bin" > target/coverage/switch.txt
-llvm-cov show --instr-profile=target/switch.profdata --name=decide "$bin" > target/coverage/decide.txt
+llvm-cov show --instr-profile=target/switch.profdata --name-regex='6decide$' "$bin" > target/coverage/decide.txt
 revert=$(grep -c 'Verdict::Revert' target/coverage/decide.txt || true)
 zero=$(grep 'Verdict::Revert' target/coverage/decide.txt | grep -c '| *0|' || true)
 if [ "$revert" -lt 2 ] || [ "$zero" -ne 0 ]; then
