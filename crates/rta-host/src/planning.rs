@@ -32,5 +32,8 @@ mod tests {
         assert!(joined.contains("DO-178C"));
         assert!(joined.contains("DO-333"));
         assert!(joined.contains("not a certification claim"));
+        assert!(joined.contains("DO-178C Software Compliance for Aerospace & Defense"));
+        assert!(joined.contains("DOT/FAA/TC-17/67"));
+        assert!(joined.contains("Criterion 1"));
     }
 }

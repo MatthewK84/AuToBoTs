@@ -5,16 +5,30 @@ This is a repository planning document. It is not a certification claim and not 
 ## Standards named
 
 - RTCA DO-178C, Software Considerations in Airborne Systems and Equipment Certification.
+- RTCA DO-330, Software Tool Qualification Considerations.
 - RTCA DO-333, Formal Methods Supplement to DO-178C and DO-278A.
 - ASTM F3269-21, Standard Practice for Methods to Safely Bound Behavior of Aircraft Systems Containing Complex Functions Using Run-Time Assurance.
 
-DO-333 is the hook for the Kani results on `decide` and for the RTLola replay argument. The full Annex A and Annex FM objective tables are not in hand. No objective identifier is cited from memory.
+DO-178C and DO-330 are not public in full. The documents in hand are explanatory:
 
-Identifiers quoted from documents opened while writing this plan:
+- Parasoft, *DO-178C Software Compliance for Aerospace & Defense*.
+- Holloway and Graydon, *Explicate '78: Assurance Case Applicability to Digital Systems*, DOT/FAA/TC-17/67, January 2018.
 
-- DO-178C Table A-1, Software planning process, from the Parasoft overview of Section 4.
-- DO-178C Table A-7 Objective 9, "Verification of additional code, that cannot be traced to Source Code, is achieved," from the Wikipedia summary of DO-178C.
-- DO-333 Annex Table FM.A-3, FM.A-4, FM.A-5, FM.A-6, and FM.A-7, and Objective FM-10 in Table FM.A-7, from RTCA FTP1037.
+No objective identifier is cited from memory. The quotes below are from those two documents.
+
+From the Parasoft ebook, Software Planning Process, Section 4: "The objectives are clearly defined and captured in Table A-1 of the standard. There are seven objectives that must be satisfied based on the software level (A-D)." The ebook lists those as the software life cycle process, inter-relationships between processes, methods and tools, development standards, verification that the software satisfies development requirements, and verification of the organizations that perform the activities. It names the planning outputs as the PSAC, the Software Development Plan, the Software Verification Plan, the Software Configuration Management Plan, and the Software Quality Assurance Plan. It also names Tables A-1 through A-10.
+
+From the same ebook: "Catastrophic results equate to failure of flight control software where an aircraft would go down and many lives would be lost. This would be classified as software level A." "Hazardous is a step down... software level B. The classification continues to go down to software level E where there's no safety concern if failure were to occur."
+
+From DOT/FAA/TC-17/67, Appendix B, quoting DO-178C §12.2.2:
+
+- Criterion 1. "A tool whose output is part of the airborne software and thus could insert an error."
+- Criterion 2. "A tool that automates verification process(es) and thus could fail to detect an error, and whose output is used to justify the elimination or reduction of … verification process(es) other than that automated by the tool, or … development process(es) that could have an impact on the airborne software."
+- Criterion 3. "A tool that, within the scope of its intended use, could fail to detect an error."
+
+The report states that DO-330's purpose "is to provide tool qualification guidance." For Level D, table 12-1 specifies TQL-4 for Criterion 1 and TQL-5 for Criterion 2 or 3 only.
+
+DO-333 is the hook for the Kani results on `decide` and for the RTLola replay argument. The DO-333 annex tables are not in hand, so no FM.A objective identifier is cited.
 
 ## Software level
 

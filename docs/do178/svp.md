@@ -6,7 +6,7 @@ This is a repository planning document. It is not a certification claim.
 
 The software-level choice is in `docs/do178/psac.md`. It is a project choice, not an authority finding. Verification of the switch and the monitor follows the Level C recommendation. The complex function is Level E and is not verified as assured software. The split is the point of ASTM F3269-21.
 
-DO-178C is the verification guidance named here. DO-333 is the hook for the Kani results on `decide` and for the RTLola replay argument. The full Annex A and Annex FM tables are not in hand. Identifiers quoted from documents opened while writing this plan are Table A-7 Objective 9 and DO-333 Objective FM-10 in Table FM.A-7.
+DO-178C is the verification guidance named here. The Parasoft ebook names Tables A-3 through A-7 for verification. DO-333 is the hook for the Kani results on `decide` and for the RTLola replay argument. The DO-333 annex tables are not in hand, so no FM.A objective identifier is cited. DOT/FAA/TC-17/67 is the document in hand for tool qualification.
 
 ## Verification
 
