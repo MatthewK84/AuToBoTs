@@ -39,6 +39,10 @@ This is a project choice, not an authority finding.
 
 The split is the point of ASTM F3269-21. The switch and the monitor bound the complex function. The complex function is unassured by design, which is why conventional DO-178C artifacts are not claimed for it. Level E is the starting recommendation for that function. An applicant can raise either level. This repository does not.
 
+## Coverage target
+
+`rta-switch` is gated at 100 percent of `decide` and the fail-closed match arms. An uncovered `Revert` arm fails the job. Host and tracker coverage is reported and not gated. See `docs/coverage.md`.
+
 ## Hazards
 
 The plans point at hazard ids H1 through H15 in `docs/hazards.md`.

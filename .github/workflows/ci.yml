@@ -57,3 +57,16 @@ jobs:
             exit 0
           fi
           gh issue close "$num" --repo "$GITHUB_REPOSITORY" --reason completed --comment "Closed after CI passed on ${GITHUB_SHA}."
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          components: llvm-tools-preview
+      - run: bash scripts/coverage.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: switch-coverage
+          path: target/coverage/

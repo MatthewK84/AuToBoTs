@@ -4,6 +4,7 @@ pub mod bundle;
 pub mod clock;
 pub mod command_out;
 pub mod config;
+pub mod coverage_gate;
 pub mod eval;
 pub mod event;
 pub mod fail_closed;
