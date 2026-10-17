@@ -238,6 +238,7 @@ fn pin(bytes: &[u8]) -> u64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
 

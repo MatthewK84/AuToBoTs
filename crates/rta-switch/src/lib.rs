@@ -1,5 +1,7 @@
 //! Pure switch. Forbidden: rtlola-interpreter, mavlink, and a release actuator.
 
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+
 use rta_spec::{Phase, Reason, TickInput, TickLog, Verdict};
 
 pub mod authority;
@@ -146,6 +148,7 @@ fn inhibit(reason: Reason) -> (Command, TickLog) {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
 
@@ -403,6 +406,17 @@ mod tests {
         assert!(docs.contains("cargo kani -p rta-switch"));
         let ci = include_str!("../../../.github/workflows/ci.yml");
         assert!(!ci.contains("cargo kani"));
+    }
+
+    #[test]
+    fn a_deliberate_unwrap_is_denied_and_lints_are_not_a_proof() {
+        let source = include_str!("lib.rs");
+        let note = include_str!("../../../docs/lints.md");
+        assert!(source.contains("deny(clippy::unwrap_used"));
+        assert!(source.contains("clippy::expect_used"));
+        assert!(source.contains("clippy::indexing_slicing"));
+        assert!(note.contains("Lints are not a proof"));
+        assert!(note.contains("not evidence"));
     }
 
     #[test]
