@@ -7,7 +7,7 @@
 //! while the tick thread is stalled, drives the same recovery latch on its own socket handle.
 
 use crate::clock::age_ms;
-use crate::command_out::{reported_mode, to_message};
+use crate::command_out::{reported_mode, time_boot_ms, to_message, Target};
 use crate::config::{self, Config};
 use crate::eval_worker::{EvalWorker, Outcome};
 use crate::fail_closed::{FailClosed, TickCase};
@@ -65,6 +65,8 @@ pub struct Vehicle {
     pub fc_heartbeat_ms: Option<u64>,
     pub fc_custom_mode: Option<u32>,
     pub fc_system: Option<u8>,
+    /// The component id in the flight controller's `HEARTBEAT` header.
+    pub fc_component: Option<u8>,
     /// `MAV_MODE_FLAG_SAFETY_ARMED` in the last flight-controller `HEARTBEAT`.
     pub fc_armed: bool,
     pub fix_ms: Option<u64>,
@@ -72,6 +74,17 @@ pub struct Vehicle {
     pub east_m: f64,
     pub alt_m: f64,
     pub link: LinkAge,
+}
+
+impl Vehicle {
+    /// Where commands go: the system and component of the last flight-controller
+    /// `HEARTBEAT`. `None` until one is heard; nothing is commanded before that.
+    pub fn fc_target(&self) -> Option<Target> {
+        Some(Target {
+            system: self.fc_system?,
+            component: self.fc_component?,
+        })
+    }
 }
 
 /// Apply one inbound message. Ages use local receive time, never the sender timestamp.
@@ -86,6 +99,7 @@ pub fn apply_message(vehicle: &mut Vehicle, header: &MavHeader, message: &MavMes
             vehicle.fc_heartbeat_ms = Some(now_ms);
             vehicle.fc_custom_mode = Some(beat.custom_mode);
             vehicle.fc_system = Some(header.system_id);
+            vehicle.fc_component = Some(header.component_id);
             vehicle.fc_armed = beat
                 .base_mode
                 .contains(MavModeFlag::MAV_MODE_FLAG_SAFETY_ARMED);
@@ -274,7 +288,7 @@ impl Shared {
     fn drive_recovery(
         &self,
         sender: &mut Sender,
-        target: u8,
+        target: Target,
         now_ms: u64,
         reported: Option<RecoveryMode>,
     ) -> Option<Step> {
@@ -442,13 +456,9 @@ pub fn run<W: Write>(
             SwitchCommand::Setpoints { .. } => verdict.unwrap_or(Verdict::Revert),
         };
 
-        let target = vehicle.fc_system.unwrap_or(config.link.system_id);
-        if !heard {
-            // Nothing is commanded to a flight controller that has not been heard.
-            reasons.push(Reason::NoFc);
-        } else if !gated.act {
-            // Monitor only. The gate has logged `disarmed` or `not_ready`.
-        } else {
+        // Commands go to the system and component of the flight controller's heartbeat.
+        let target = vehicle.fc_target();
+        if let (Some(target), true) = (target, gated.act) {
             match command {
                 SwitchCommand::Mode { .. } => shared.engage_recovery(now_ms),
                 SwitchCommand::Setpoints { .. } if request.is_none() => {
@@ -457,8 +467,11 @@ pub fn run<W: Write>(
                     reasons.push(Reason::NoRequest);
                 }
                 SwitchCommand::Setpoints { .. } => {
-                    if let Some(message) = to_message(&command, target) {
-                        let _ = sender.send(&message);
+                    match to_message(&command, target, time_boot_ms(clock.now_ms())) {
+                        Some(message) => {
+                            let _ = sender.send(&message);
+                        }
+                        None => reasons.push(Reason::BadSetpoint),
                     }
                 }
                 SwitchCommand::Idle => {}
@@ -467,6 +480,11 @@ pub fn run<W: Write>(
             if let Some(step) = shared.drive_recovery(&mut sender, target, now_ms, reported) {
                 reasons.push(Reason::Sent(step));
             }
+        } else if target.is_none() {
+            // Nothing is commanded to a flight controller that has not been heard.
+            reasons.push(Reason::NoFc);
+        } else {
+            // Monitor only. The gate has logged `disarmed` or `not_ready`.
         }
         lock(&shared.recovery).reasons(&mut reasons);
 
@@ -513,8 +531,7 @@ pub fn run<W: Write>(
     let reported = vehicle.fc_custom_mode.and_then(reported_mode);
     let may_act = shared.gate_open.load(Ordering::SeqCst)
         && (gate_mode_of(config) == gate::Mode::Immediate || vehicle.fc_armed);
-    if vehicle.fc_heartbeat_ms.is_some() && may_act && reported != Some(recovery) {
-        let target = vehicle.fc_system.unwrap_or(config.link.system_id);
+    if let (Some(target), true) = (vehicle.fc_target(), may_act && reported != Some(recovery)) {
         let now_ms = clock.now_ms();
         shared.engage_recovery(now_ms);
         shared.drive_recovery(&mut sender, target, now_ms, reported);
@@ -560,7 +577,11 @@ fn spawn_receiver(
                                 Frame::CommandAck(ack) => {
                                     vehicle.link.observe(LinkMessage::Command, now_ms);
                                     // Only the flight controller's answer counts.
-                                    if vehicle.fc_system == Some(header.system_id) {
+                                    let from = Target {
+                                        system: header.system_id,
+                                        component: header.component_id,
+                                    };
+                                    if vehicle.fc_target() == Some(from) {
                                         if let Some(slot) = acks.get_mut(count) {
                                             *slot = Some(ack);
                                             count += 1;
@@ -592,7 +613,6 @@ fn spawn_watchdog(
     let shared = Arc::clone(shared);
     let mut dog = Watchdog::new(config.tick.period_ms, config.tick.watchdog_misses);
     let poll = Duration::from_millis((config.tick.period_ms / 2).max(1));
-    let fallback_target = config.link.system_id;
     let armed_gate = gate_mode_of(config) == gate::Mode::Armed;
     thread::Builder::new()
         .name("rta-watchdog".into())
@@ -616,7 +636,9 @@ fn spawn_watchdog(
                     continue;
                 }
                 let reported = vehicle.fc_custom_mode.and_then(reported_mode);
-                let target = vehicle.fc_system.unwrap_or(fallback_target);
+                let Some(target) = vehicle.fc_target() else {
+                    continue;
+                };
                 if shared
                     .drive_recovery(&mut sender, target, now_ms, reported)
                     .is_some()
@@ -638,7 +660,7 @@ mod tests {
     use crate::monitor::build_once;
     use mavlink::dialects::common::{
         MavCmd, MavModeFlag, MavResult, MavState, MavType, COMMAND_ACK_DATA, HEARTBEAT_DATA,
-        LOCAL_POSITION_NED_DATA,
+        LOCAL_POSITION_NED_DATA, SET_POSITION_TARGET_LOCAL_NED_DATA,
     };
     use rta_switch::{Request, StubComplex};
     use std::net::{SocketAddr, UdpSocket};
@@ -710,6 +732,10 @@ ready_fix_age_ms = 200
         nav: Vec<(MavCmd, Instant)>,
         setpoints: usize,
         heartbeats: usize,
+        /// Every `SET_POSITION_TARGET_LOCAL_NED` as decoded.
+        setpoint_data: Vec<SET_POSITION_TARGET_LOCAL_NED_DATA>,
+        /// `target_system` and `target_component` of every `COMMAND_LONG`.
+        command_targets: Vec<(u8, u8)>,
     }
 
     impl Seen {
@@ -752,6 +778,8 @@ ready_fix_age_ms = 200
         streaming: Arc<AtomicBool>,
         seen: Arc<Mutex<Seen>>,
         stop: Arc<AtomicBool>,
+        /// System and component ids in every frame the fake sends.
+        ids: (u8, u8),
     }
 
     impl FakeFc {
@@ -768,6 +796,7 @@ ready_fix_age_ms = 200
                 streaming: Arc::new(AtomicBool::new(true)),
                 seen: Arc::new(Mutex::new(Seen::default())),
                 stop: Arc::new(AtomicBool::new(false)),
+                ids: (1, 1),
             }
         }
 
@@ -783,6 +812,7 @@ ready_fix_age_ms = 200
             let px4 = self.px4;
             let armed = Arc::clone(&self.armed);
             let streaming = Arc::clone(&self.streaming);
+            let (system_id, component_id) = self.ids;
             thread::spawn(move || {
                 let mut was_armed = armed.load(Ordering::SeqCst);
                 let base_mode = |armed: bool| {
@@ -800,8 +830,8 @@ ready_fix_age_ms = 200
                 let mut last_beat: Option<Instant> = None;
                 let mut send = |message: &MavMessage, sequence: &mut u8| {
                     let header = MavHeader {
-                        system_id: 1,
-                        component_id: 1,
+                        system_id,
+                        component_id,
                         sequence: *sequence,
                     };
                     *sequence = sequence.wrapping_add(1);
@@ -851,9 +881,14 @@ ready_fix_age_ms = 200
                         decode_each(&inbound[..count], |_, message| {
                             let mut seen = lock(&seen);
                             let command = match message {
-                                MavMessage::COMMAND_LONG(data) => data,
-                                MavMessage::SET_POSITION_TARGET_LOCAL_NED(_) => {
+                                MavMessage::COMMAND_LONG(data) => {
+                                    seen.command_targets
+                                        .push((data.target_system, data.target_component));
+                                    data
+                                }
+                                MavMessage::SET_POSITION_TARGET_LOCAL_NED(data) => {
                                     seen.setpoints += 1;
+                                    seen.setpoint_data.push(data.clone());
                                     return;
                                 }
                                 MavMessage::HEARTBEAT(_) => {
@@ -1546,6 +1581,98 @@ ready_fix_age_ms = 200
     fn set(flag: &Arc<AtomicBool>, value: bool) -> impl FnMut() + 'static {
         let flag = Arc::clone(flag);
         move || flag.store(value, Ordering::SeqCst)
+    }
+
+    /// Asks for one fixed setpoint every tick and moves the fake outside the fence at
+    /// `breach_at`.
+    struct Asks {
+        tick: u64,
+        request: Request,
+        breach_at: u64,
+        position: Arc<Mutex<(f32, f32, f32)>>,
+    }
+
+    impl Complex for Asks {
+        fn request(&mut self) -> Option<Request> {
+            self.tick += 1;
+            if self.tick == self.breach_at {
+                *lock(&self.position) = OUTSIDE;
+            }
+            Some(self.request)
+        }
+    }
+
+    #[test]
+    fn setpoints_and_recovery_go_to_the_heard_flight_controller_with_yaw_and_boot_time() {
+        let mut fc = FakeFc::bind();
+        // Not the configured companion id (1), and not the old hard-coded component (1).
+        fc.ids = (42, 7);
+        let request = Request {
+            north: 120.0,
+            east: 80.0,
+            down: -25.0,
+            yaw: 0.75,
+            commit: true,
+        };
+        let mut asks = Asks {
+            tick: 0,
+            request,
+            breach_at: 12,
+            position: Arc::clone(&fc.position),
+        };
+        let started = Instant::now();
+        let (report, seen, text) = run_fc("targets", &fc, |_| {}, 18, &mut asks);
+        let elapsed_ms = u32::try_from(started.elapsed().as_millis()).unwrap();
+        assert!(report.recovery_sent, "{text}");
+        assert!(seen.setpoints >= 3, "{seen:?}\n{text}");
+        for data in &seen.setpoint_data {
+            assert_eq!(data.type_mask.bits(), 0x09F8, "{data:?}");
+            assert_eq!((data.x, data.y, data.z), (120.0, 80.0, -25.0));
+            assert_eq!(data.yaw, 0.75);
+            assert_eq!((data.target_system, data.target_component), (42, 7));
+            assert!(
+                data.time_boot_ms <= elapsed_ms,
+                "{data:?} after {elapsed_ms} ms"
+            );
+        }
+        // The boot time is the run clock: it never goes back and it moves between ticks.
+        let times: Vec<u32> = seen.setpoint_data.iter().map(|d| d.time_boot_ms).collect();
+        assert!(times.windows(2).all(|pair| pair[0] <= pair[1]), "{times:?}");
+        assert!(times.last() > times.first(), "{times:?}");
+        assert!(!seen.command_targets.is_empty(), "{seen:?}");
+        assert!(
+            seen.command_targets.iter().all(|target| *target == (42, 7)),
+            "{:?}",
+            seen.command_targets
+        );
+        // The flight controller's ack, from (42, 7), confirmed nothing the heartbeat did not.
+        assert!(report.recovery_confirmed, "{report:?}");
+    }
+
+    #[test]
+    fn a_non_finite_setpoint_request_is_logged_and_not_forwarded() {
+        let fc = FakeFc::bind();
+        let mut asks = Asks {
+            tick: 0,
+            request: Request {
+                north: 120.0,
+                east: 80.0,
+                down: -25.0,
+                yaw: f64::NAN,
+                commit: false,
+            },
+            breach_at: u64::MAX,
+            position: Arc::clone(&fc.position),
+        };
+        let (_, seen, text) = run_fc("bad-setpoint", &fc, |_| {}, 8, &mut asks);
+        assert_eq!(seen.setpoints, 0, "{seen:?}");
+        let lines = heard_lines(&text);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.contains("bad_setpoint") && line.contains("command=setpoints")),
+            "{text}"
+        );
     }
 
     fn immediate(config: &mut Config) {
