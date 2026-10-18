@@ -9,3 +9,5 @@ The numbers live in `config/example.toml`. This file names the keys. It does not
 - Flight-controller mode-change latency is `tick.mode_change_latency_ms`. That value is an assumption until M10 measures the bench. The fence margin in M2.3 has to cover it.
 
 The monitor must trip early enough that recovery can still recover. That is the requirement. The stopping-distance margin is how the fence meets it.
+
+- Withdraw budget is one tick plus link age. The starting number is 100 ms after receipt. It is an assumption until M10 measures it. A withdraw that arrives mid-tick inhibits the next command. It does not retract the command already handed to the socket in that tick. That command is logged as in flight.

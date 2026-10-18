@@ -24,6 +24,7 @@ pub struct OperatorPath {
     pub grant: Option<Grant>,
     pub revoked: Vec<String>,
     pub log: Vec<String>,
+    pub in_flight: Option<String>,
 }
 
 pub fn parse_operator(text: &str) -> Option<OperatorMessage> {
@@ -78,6 +79,11 @@ pub fn apply(path: &mut OperatorPath, event: LinkEvent) {
         }
         LinkEvent::ModeChange { .. } | LinkEvent::Other => {}
     }
+}
+
+pub fn hand_to_socket(path: &mut OperatorPath, command: &str) {
+    path.in_flight = Some(command.to_string());
+    path.log.push(format!("in flight {command}"));
 }
 
 pub fn tick<'a>(path: &'a OperatorPath, sample: AuthorityTick<'a>) -> CommitDecision {
@@ -180,6 +186,36 @@ mod tests {
         assert_eq!(second, CommitDecision::Inhibit(AuthorityReason::Revoked));
         assert!(path.log[1].contains("commit_inhibited"));
         assert!(path.log[1].contains("grant_revoked"));
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn withdraw_during_eval_inhibits_the_following_tick_and_leaves_the_sent_command() {
+        let grant = signed();
+        let mut path = OperatorPath::default();
+        apply(&mut path, event_from_text(&line(&grant)));
+        let first = authorize(&AuthorityTick {
+            grant: path.grant.as_ref(),
+            revoked: &path.revoked,
+            ..sample()
+        });
+        assert_eq!(first, CommitDecision::Commit);
+        hand_to_socket(&mut path, "commit");
+        apply(&mut path, event_from_text("WITHDRAW nonce=n-1"));
+        assert_eq!(path.in_flight.as_deref(), Some("commit"));
+        let second = authorize(&AuthorityTick {
+            grant: path.grant.as_ref(),
+            revoked: &path.revoked,
+            ..sample()
+        });
+        assert_eq!(second, CommitDecision::Inhibit(AuthorityReason::Revoked));
+        assert!(path
+            .log
+            .iter()
+            .any(|line| line.contains("in flight commit")));
+        let timing = include_str!("../../../docs/timing.md");
+        assert!(timing.contains("100 ms"));
+        assert!(timing.contains("assumption"));
     }
 
     #[test]
