@@ -14,6 +14,7 @@ pub mod event;
 pub mod fail_closed;
 pub mod fault;
 pub mod fence;
+pub mod gate;
 pub mod icd_fc;
 pub mod jsf;
 pub mod learning_hazards;

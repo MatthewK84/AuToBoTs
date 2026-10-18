@@ -11,7 +11,7 @@ It still shares two things with the eval path.
 | Socket | The mode sender writes the recovery command on the same link. | The interpreter, the filter, and the tracker. |
 | Clock | The miss window is `now_ms` from the monotonic clock. | Wall time. A step back does not shrink the window. |
 
-The runtime runs it on its own thread, `rta-watchdog`, in `crates/rta-host/src/runtime.rs`. It sends on its own clone of the socket handle with its own frame buffer and sequence. It does not wait for the tick thread. It drives the same recovery latch as the tick thread (`docs/recovery.md`), under one lock, so no attempt goes out twice. It drives the latch only while the tick thread is stalled.
+The runtime runs it on its own thread, `rta-watchdog`, in `crates/rta-host/src/runtime.rs`. It sends on its own clone of the socket handle with its own frame buffer and sequence. It does not wait for the tick thread. It drives the same recovery latch as the tick thread (`docs/recovery.md`), under one lock, so no attempt goes out twice. It drives the latch only while the tick thread is stalled. It obeys the startup gate in `docs/startup.md`: it acts only if the last tick was allowed to act and, in `armed` mode, the flight controller still reports armed.
 
 A hung evaluator no longer stalls the tick thread; the deadline in `docs/deadline.md` reverts it inside one tick. The watchdog stays the backstop for a tick thread that stalls anywhere else.
 

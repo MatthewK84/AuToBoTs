@@ -45,6 +45,24 @@ pub const MATRIX: &[Row] = &[
         commit: false,
         recovery: true,
     },
+    Row {
+        name: "Disarmed",
+        navigation: false,
+        commit: false,
+        recovery: false,
+    },
+    Row {
+        name: "Not ready",
+        navigation: false,
+        commit: false,
+        recovery: false,
+    },
+    Row {
+        name: "Not ready at arm",
+        navigation: false,
+        commit: false,
+        recovery: true,
+    },
 ];
 
 #[cfg(test)]
@@ -62,6 +80,50 @@ mod tests {
         assert!(verdicts.contains("inhibit_clears_commit"));
         assert!(verdicts.contains("revert_has_no_commit_field"));
         assert!(doc.contains("never allowed"));
+    }
+
+    #[test]
+    fn every_row_in_the_note_is_in_the_matrix_with_the_same_cells() {
+        let doc = include_str!("../../../docs/degraded.md");
+        for row in MATRIX {
+            let cell = |allowed: bool, yes: &str, no: &str| {
+                if allowed {
+                    yes.to_string()
+                } else {
+                    no.to_string()
+                }
+            };
+            let prefix = format!(
+                "| {} | {} | not allowed | {}",
+                row.name,
+                cell(row.navigation, "allowed", "not allowed"),
+                cell(row.recovery, "commanded", "not commanded"),
+            );
+            assert!(doc.contains(&prefix), "{prefix}");
+        }
+        let rows = doc
+            .lines()
+            .filter(|line| {
+                line.starts_with("| ") && !line.starts_with("| Row") && !line.starts_with("| ---")
+            })
+            .count();
+        assert_eq!(rows, MATRIX.len());
+    }
+
+    #[test]
+    fn the_matrix_defines_startup_gating() {
+        let doc = include_str!("../../../docs/degraded.md");
+        for item in [
+            "monitor only",
+            "`disarmed`",
+            "`not_ready`",
+            "`not_ready_at_arm`",
+            "latched until restart",
+            "the watchdog included",
+            "docs/startup.md",
+        ] {
+            assert!(doc.contains(item), "{item}");
+        }
     }
 
     #[test]

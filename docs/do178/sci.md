@@ -9,7 +9,7 @@ This is a configuration index. It names hashes, not floating branch tips. It is 
 | Spec `spec/monitor.lola` | `ae398e85f30cd1e8723bbef36ad934b3651017e6d987eeedbc7fddf229bd6553` |
 | Switch crate content | `8ef36e2c13b88ae726738d52da06723be20e7ad52127db46f0b8b069dfb052ac` |
 | Switch crate last change | `802feaa2f982b53f46f237e78804e47a4c014aff` |
-| Config `config/example.toml` | `518d4494221123a1cc9e8069fcc7c618ec090759e719cde79478938f68406622` |
+| Config `config/example.toml` | `747ff29188a50757aed426688ee7229695d09a62bdd8a947845bc67c3d2781db` |
 | Rust toolchain | `1.98.1` |
 | `Cargo.lock` | `b9f7bf855f2a02f3471b045294dea211bb8af4ca95d1ed1895a9aa99a0b26804` |
 | Runner image | `ubuntu-latest`, floating. Gap. |
