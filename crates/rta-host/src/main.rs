@@ -4,7 +4,7 @@
 //! Startup is config, spec load, log open, then socket. The tick loop runs until SIGINT or
 //! `--ticks N`, then shuts down in order: stop setpoints, recovery mode, flush log, exit.
 
-use rta_host::{config, eval_worker, fault, link, monitor, runtime, tick_log};
+use rta_host::{config, eval_worker, fault, link, monitor, runtime, spec, tick_log};
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -69,6 +69,14 @@ fn main() -> ExitCode {
         }
     };
     let spec_hash = tick_log::spec_hash(spec_text.as_bytes());
+    // Thresholds the host checks as well as the spec are read from the spec, not copied.
+    let limits = match spec::limits(&spec_text) {
+        Ok(limits) => limits,
+        Err(err) => {
+            eprintln!("spec: {err}");
+            return ExitCode::from(1);
+        }
+    };
     // The monitor is built once, on the evaluation worker. A parse or type error exits here,
     // before the log and the socket.
     let worker = match eval_worker::EvalWorker::start(move || {
@@ -125,6 +133,7 @@ fn main() -> ExitCode {
         runtime::RunOptions {
             max_ticks: args.max_ticks,
             stop,
+            limits,
         },
     ) {
         Ok(report) => {

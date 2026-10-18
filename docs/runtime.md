@@ -16,11 +16,11 @@ The vehicle state is fixed size. A status text changes no field. The three threa
 ## One tick
 
 1. Snapshot the vehicle state. Ages are now minus local receive time. A sample never received is `f64::MAX`, which is stale.
-2. `fence_ok` is the host fence on the `LOCAL_POSITION_NED` north and east, with altitude `-z`. No fix is `fence_ok = false`. `source = "fc"` is `fence_ok = false` in the host record.
+2. `fence_ok` is the host fence on the `LOCAL_POSITION_NED` north and east, with altitude `-z`, against the configured `fence.polygon`. No path substitutes an empty polygon. Fewer than three vertices is never inside. No fix is `fence_ok = false`. `source = "fc"` is `fence_ok = false` in the host record.
 3. No tracker is wired. Track confidence is zero at range zero, which is the lost-tracker inhibit in `docs/degraded.md`.
 4. A record that `try_new` rejects is no verdict. `FailClosed` makes no verdict Revert.
 5. The deadline is preemptive. The tick thread waits at most `tick.deadline_ms` for the evaluation worker and does not wait for a hung evaluator. A missed deadline, a busy worker, or a dead worker is Revert and latches as an evaluation fault until restart; the line carries `late` or `eval_fault`.
-6. Recovery in progress, a failed log write, an evaluation fault, or an arm before readiness latches Revert until restart. The log line carries `latched`.
+6. Recovery in progress, a failed log write, an evaluation fault, or an arm before readiness latches Revert until restart. `FailClosed` holds the write and evaluation latches itself, whatever command the tick would have sent. Its heartbeat check uses the spec's `heartbeat_stale` threshold, read from the loaded spec at startup. The log line carries `latched`.
 7. `decide` is the only constructor of the command. `command_out` encodes it.
 8. Nothing is sent before the first flight-controller `HEARTBEAT`. The line carries `no_fc`. After it, the startup gate in `docs/startup.md` decides whether the tick may act. A monitor-only line carries `disarmed` or `not_ready`. An arm before readiness carries `not_ready_at_arm` and latches Revert.
 9. A `Setpoints` command with no complex-function request is not forwarded. The switch fills a missing request with zeros, and a zero setpoint is a real position. The line carries `no_request`.

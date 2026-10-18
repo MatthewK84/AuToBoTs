@@ -2,14 +2,16 @@
 
 use rta_host::config::load;
 use rta_host::eval::Evaluator;
+use rta_host::fail_closed::{FailClosed, TickCase};
 use rta_host::fault::load_spec_file;
 use rta_host::link::{open, parse_endpoint};
 use rta_host::mavlink_link::MavLink;
 use rta_host::monitor::build_once;
+use rta_host::runtime::recovery_of;
 use rta_host::sitl::{hover_record, hover_verdict, timing_header, EXAMPLE_ENDPOINT};
-use rta_host::tick_log::{command_name, TickLog, TickRecord};
+use rta_host::spec::limits;
+use rta_host::tick_log::{command_name, spec_hash, TickLog, TickRecord};
 use rta_spec::Verdict;
-use rta_switch::SwitchCommand;
 use std::env;
 use std::path::Path;
 use std::process::ExitCode;
@@ -59,6 +61,14 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    let spec_hash = spec_hash(spec.as_bytes());
+    let limits = match limits(&spec) {
+        Ok(limits) => limits,
+        Err(err) => {
+            eprintln!("sitl: {err}");
+            return ExitCode::from(1);
+        }
+    };
     let record = match hover_record(&config) {
         Ok(record) => record,
         Err(err) => {
@@ -76,12 +86,12 @@ fn main() -> ExitCode {
     let mut eval = Evaluator::default();
     let started = std::time::Instant::now();
     let verdict = hover_verdict(&mut eval, &mut built, &record);
-    let eval_ms = started.elapsed().as_millis() as u64;
+    let eval_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     if verdict != Verdict::Pass {
         eprintln!("sitl: hover was {verdict:?}");
         return ExitCode::from(1);
     }
-    let header = timing_header(0, &[eval_ms]);
+    let header = timing_header(spec_hash, &[eval_ms]);
     if std::fs::write(Path::new("sitl-timing.txt"), &header).is_err() {
         eprintln!("sitl: timing artifact failed");
         return ExitCode::from(1);
@@ -90,16 +100,35 @@ fn main() -> ExitCode {
         eprintln!("sitl: log header failed");
         return ExitCode::from(1);
     }
-    let mut log = match TickLog::open(Path::new(&config.log.path), config.log.flush_every_n, 0) {
+    let mut log = match TickLog::open(
+        Path::new(&config.log.path),
+        config.log.flush_every_n,
+        spec_hash,
+    ) {
         Ok(log) => log,
         Err(err) => {
             eprintln!("sitl: {err}");
             return ExitCode::from(1);
         }
     };
+    // The hover goes through the same fail-closed path as the runtime, so the deadline, the
+    // spec's heartbeat limit, and the write latch all reach the logged command. Nothing is
+    // sent: the hover only heartbeats.
+    let recovery = recovery_of(&config);
+    let mut closed = FailClosed::new(limits);
+    let command = closed.command(TickCase {
+        verdict: Some(verdict),
+        late: eval_ms > config.tick.deadline_ms,
+        heartbeat_age_ms: Some(record.fc_heartbeat_age_ms()),
+        request: None,
+        reported: recovery,
+        recovery,
+        write_ok: true,
+        eval_fault: false,
+    });
     let line = TickRecord {
         tick: 1,
-        fence_ok: true,
+        fence_ok: record.fence_ok(),
         fix_age_ms: record.fix_age_ms(),
         link_age_ms: record.link_age_ms(),
         fc_heartbeat_age_ms: record.fc_heartbeat_age_ms(),
@@ -107,14 +136,15 @@ fn main() -> ExitCode {
         range_m: record.range_m(),
         verdict,
         filter_intervened: false,
-        reasons: Vec::new(),
-        command: command_name(&SwitchCommand::Idle),
-        eval_ms: 1,
-        spec_hash: 0,
+        reasons: vec!["not_sent".to_string()],
+        command: command_name(&command),
+        eval_ms,
+        spec_hash,
         alt_m: 30.0,
         indication: String::new(),
     };
-    if log.append(&line).is_err() {
+    // A failed write is the write latch: the hover fails rather than logging a pass.
+    if log.append(&line).and_then(|()| log.flush()).is_err() {
         eprintln!("sitl: log write failed");
         return ExitCode::from(1);
     }

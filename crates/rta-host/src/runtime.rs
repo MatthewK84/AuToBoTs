@@ -19,6 +19,7 @@ use crate::mavlink_link::{
     decode_frames, encode, heartbeat, CommandAck, Frame, MAX_FRAME, MAX_FRAMES_PER_DATAGRAM,
 };
 use crate::recovery::{AckResult, Latch, Policy, State, Step};
+use crate::spec::SpecLimits;
 use crate::stale::present_track;
 use crate::tick_log::{command_name, TickLog, TickRecord};
 use crate::watchdog::Watchdog;
@@ -308,6 +309,8 @@ pub struct RunOptions {
     pub max_ticks: Option<u64>,
     /// Set by SIGINT, or by a caller, to begin the shutdown order.
     pub stop: Arc<AtomicBool>,
+    /// Limits read from the loaded spec (`spec::limits`). The host keeps no copy.
+    pub limits: SpecLimits,
 }
 
 /// Run until `stop` or `max_ticks`. Startup has already loaded config, built the monitor on
@@ -353,7 +356,7 @@ pub fn run<W: Write>(
 
     let mut sender = Sender::new(link, config);
     let mut gate = Gate::new(gate_mode_of(config), config.startup.ready_timeout_ms);
-    let mut closed = FailClosed::default();
+    let mut closed = FailClosed::new(options.limits);
     let mut report = RunReport::default();
     let mut log_failed = false;
     let mut last_heartbeat_ms: Option<u64> = None;
@@ -429,6 +432,7 @@ pub fn run<W: Write>(
             reported: reported_or_other(reported, recovery),
             recovery,
             write_ok: !log_failed,
+            eval_fault: worker.faulted(),
         });
         // The logged verdict is the one the switch acted on. Mode and Idle come only from
         // Revert; a forced Revert shows here even when the spec said Pass.
@@ -966,6 +970,7 @@ ready_fix_age_ms = 200
         RunOptions {
             max_ticks: Some(ticks),
             stop: Arc::new(AtomicBool::new(false)),
+            limits: crate::spec::limits(SPEC).unwrap(),
         }
     }
 
@@ -1729,6 +1734,83 @@ ready_fix_age_ms = 200
             heard_lines(&text).iter().all(|l| l.contains("disarmed")),
             "{text}"
         );
+    }
+
+    /// A triangle: the lower-left half of the 200 m test square.
+    const TRIANGLE: [[f64; 2]; 3] = [[0.0, 0.0], [200.0, 0.0], [0.0, 200.0]];
+
+    fn with_polygon(config: &mut Config, polygon: &[[f64; 2]]) {
+        if let config::Fence::Host {
+            polygon: configured,
+            ..
+        } = &mut config.fence
+        {
+            *configured = polygon.to_vec();
+        }
+    }
+
+    #[test]
+    fn the_tick_fences_on_the_configured_polygon() {
+        let mut vehicle = Vehicle {
+            fix_ms: Some(0),
+            alt_m: 30.0,
+            ..Vehicle::default()
+        };
+        let square = config(1, "unused.log");
+        let mut triangle = config(1, "unused.log");
+        with_polygon(&mut triangle, &TRIANGLE);
+        // Inside the square, outside the triangle: only the configured polygon decides.
+        (vehicle.north_m, vehicle.east_m) = (155.0, 155.0);
+        assert!(present(&square, &vehicle, 0).unwrap().fence_ok);
+        assert!(!present(&triangle, &vehicle, 0).unwrap().fence_ok);
+        // Deep inside both.
+        (vehicle.north_m, vehicle.east_m) = (60.0, 60.0);
+        assert!(present(&triangle, &vehicle, 0).unwrap().fence_ok);
+        // An empty or degenerate polygon is never inside.
+        for polygon in [&[][..], &TRIANGLE[..2]] {
+            let mut bad = config(1, "unused.log");
+            with_polygon(&mut bad, polygon);
+            assert!(!present(&bad, &vehicle, 0).unwrap().fence_ok, "{polygon:?}");
+        }
+    }
+
+    #[test]
+    fn a_configured_polygon_trips_the_loop() {
+        // The fake sits at (155, 155): inside the default square, outside the configured
+        // triangle. The loop reverts and commands AUTO + RTL on the first heard tick.
+        let fc = FakeFc::bind();
+        *lock(&fc.position) = (155.0, 155.0, -30.0);
+        let (report, seen, text) = run_fc(
+            "triangle",
+            &fc,
+            |config| with_polygon(config, &TRIANGLE),
+            8,
+            &mut StubComplex,
+        );
+        assert_eq!(seen.set_mode.len(), 1, "{text}");
+        assert!(report.recovery_confirmed, "{report:?}");
+        let first = heard_lines(&text)[0];
+        for item in ["fence_ok=0", "verdict=revert", "sent:set_mode"] {
+            assert!(first.contains(item), "{item}: {first}");
+        }
+    }
+
+    #[test]
+    fn no_host_path_bypasses_the_configured_polygon() {
+        for (name, source) in [
+            ("main.rs", include_str!("main.rs")),
+            ("runtime.rs", include_str!("runtime.rs")),
+            ("sitl.rs", include_str!("sitl.rs")),
+            ("bin/rta-sitl.rs", include_str!("bin/rta-sitl.rs")),
+        ] {
+            let body = source.split("#[cfg(test)]").next().unwrap_or_default();
+            for bypass in [
+                ["polygon: &", "[]"].concat(),
+                ["polygon.", "is_empty()"].concat(),
+            ] {
+                assert!(!body.contains(&bypass), "{name}: {bypass}");
+            }
+        }
     }
 
     #[test]
