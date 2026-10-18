@@ -17,3 +17,15 @@ The example polygon is one meter on a side, smaller than the stopping margin at 
 ## Timing
 
 SITL timing is not target timing. The SITL log header carries that disclaimer, and the eval-duration distribution is written to `sitl-timing.txt`. Those numbers are a host-side sample, not a board measurement.
+
+## Claims
+
+SITL is developmental. A test name is cited only in its own column.
+
+| Column | Item |
+| --- | --- |
+| Shown | `scripts/sitl.sh`. Mode change on fence breach, in simulation. |
+| Shown | `scripts/sitl-trips.sh`. Inhibit on weak track. Revert on heartbeat loss. In simulation. |
+| Not shown | Aerodynamic truth. |
+| Not shown | Latency on the target. Target timing. |
+| Not shown | Tracker performance. |

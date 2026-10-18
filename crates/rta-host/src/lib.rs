@@ -1,6 +1,7 @@
 //! Host library. The replay binary reuses the monitor.
 
 pub mod bundle;
+pub mod claims;
 pub mod clock;
 pub mod command_out;
 pub mod common_mode;
