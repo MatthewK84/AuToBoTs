@@ -55,6 +55,12 @@ SIGINT or `--ticks N` ends the loop. The order is stop setpoints, send the recov
 
 `udpin` is the form a PX4 SITL onboard port expects. `config/example.toml` keeps `udp:` so `scripts/sitl.sh` and its stand-in peer are unchanged.
 
+## Diagnostics
+
+Process diagnostics are not the tick log. `rta-host` writes a start-up error, the run banner, and the run summary as one line each, with a level and a component: `rta-host level=error component=config msg="..."`. `error` and `warn` go to stderr; `info` goes to stdout. `RTA_LOG` sets the lowest level shown: `error`, `warn`, or `info`, the default. An unknown value shows everything, so a typo never hides an error. The code is `crates/rta-host/src/diag.rs`. The tick thread writes no diagnostics; every tick is in the tick log, whose format is unchanged.
+
+The development binaries (`rta-replay`, `rta-sitl`, `rta-target`, `rta-trips`) keep their plain output.
+
 ## Not shown
 
 No PX4 SITL run of this loop is recorded. The end-to-end tests use a fake flight controller on loopback.

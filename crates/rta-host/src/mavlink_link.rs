@@ -31,7 +31,7 @@ impl MavLink {
             Endpoint::Serial { path, baud } => format!("serial:{path}:{baud}"),
         };
         let connection = mavlink::connect::<MavMessage>(&address).map_err(|err| {
-            eprintln!("mavlink connect {address}: {err}");
+            crate::diag::warn("link", &format!("mavlink connect {address}: {err}"));
             match endpoint {
                 Endpoint::Serial { .. } => LinkError::SerialNotBuilt,
                 Endpoint::Udp { .. } | Endpoint::UdpIn { .. } => LinkError::BadEndpoint,

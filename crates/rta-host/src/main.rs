@@ -17,7 +17,7 @@
     )
 )]
 
-use rta_host::{config, eval_worker, fault, link, monitor, runtime, spec, tick_log};
+use rta_host::{config, diag, eval_worker, fault, link, monitor, runtime, spec, tick_log};
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -56,28 +56,28 @@ fn main() -> ExitCode {
     let args = match parse_args(std::env::args().skip(1)) {
         Ok(args) => args,
         Err(err) => {
-            eprintln!("{err}");
+            diag::error("args", &err.to_string());
             return ExitCode::from(2);
         }
     };
     let config = match config::load(Path::new(&args.config)) {
         Ok(config) => config,
         Err(err) => {
-            eprintln!("config: {err}");
+            diag::error("config", &err.to_string());
             return ExitCode::from(1);
         }
     };
     let endpoint = match link::parse_endpoint(&config.link.endpoint) {
         Ok(endpoint) => endpoint,
         Err(err) => {
-            eprintln!("link: {err:?}");
+            diag::error("link", &format!("{err:?}"));
             return ExitCode::from(1);
         }
     };
     let spec_text = match fault::load_spec_file(Path::new(&config.spec.path)) {
         Ok(text) => text,
         Err(err) => {
-            eprintln!("spec: {err}");
+            diag::error("spec", &err.to_string());
             return ExitCode::from(1);
         }
     };
@@ -86,7 +86,7 @@ fn main() -> ExitCode {
     let limits = match spec::limits(&spec_text) {
         Ok(limits) => limits,
         Err(err) => {
-            eprintln!("spec: {err}");
+            diag::error("spec", &err.to_string());
             return ExitCode::from(1);
         }
     };
@@ -99,7 +99,7 @@ fn main() -> ExitCode {
     }) {
         Ok(worker) => worker,
         Err(err) => {
-            eprintln!("spec: {err}");
+            diag::error("spec", &err.to_string());
             return ExitCode::from(1);
         }
     };
@@ -110,30 +110,30 @@ fn main() -> ExitCode {
     ) {
         Ok(log) => log,
         Err(err) => {
-            eprintln!("log: {err}");
+            diag::error("log", &err.to_string());
             return ExitCode::from(1);
         }
     };
     let link = match link::open(&endpoint, runtime::RECV_TIMEOUT) {
         Ok(link) => link,
         Err(err) => {
-            eprintln!("link: {err:?}");
+            diag::error("link", &format!("{err:?}"));
             return ExitCode::from(1);
         }
     };
     let stop = Arc::new(AtomicBool::new(false));
     let on_signal = Arc::clone(&stop);
     if let Err(err) = ctrlc::set_handler(move || on_signal.store(true, Ordering::SeqCst)) {
-        eprintln!("signal: {err}");
+        diag::error("signal", &err.to_string());
         return ExitCode::from(1);
     }
     let bound = link
         .local_addr()
         .map(|address| address.to_string())
         .unwrap_or_default();
-    println!(
-        "rta-host: running, bound {bound}, endpoint {}",
-        config.link.endpoint
+    diag::info(
+        "runtime",
+        &format!("running, bound {bound}, endpoint {}", config.link.endpoint),
     );
     let mut complex = rta_switch::StubComplex;
     match runtime::run(
@@ -150,19 +150,19 @@ fn main() -> ExitCode {
         },
     ) {
         Ok(report) => {
-            println!(
-                "rta-host: stopped after {} ticks, overruns {}, recovery_sent {}, recovery_attempts {}, recovery_confirmed {}, watchdog_fired {}",
+            diag::info("runtime", &format!(
+                "stopped after {} ticks, overruns {}, recovery_sent {}, recovery_attempts {}, recovery_confirmed {}, watchdog_fired {}",
                 report.ticks,
                 report.overruns,
                 report.recovery_sent,
                 report.recovery_attempts,
                 report.recovery_confirmed,
                 report.watchdog_fired
-            );
+            ));
             ExitCode::SUCCESS
         }
         Err(err) => {
-            eprintln!("runtime: {err:?}");
+            diag::error("runtime", &format!("{err:?}"));
             ExitCode::from(1)
         }
     }

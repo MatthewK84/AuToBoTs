@@ -39,14 +39,14 @@ stateDiagram-v2
     Pass --> Revert: fence, stale fix, stale link, stale heartbeat, fault, deadline
     Inhibit --> Revert: any revert hazard
     Inhibit --> Pass: hazard clears
-    Revert --> Revert: latched fault or recovery already sent
+    Revert --> Revert: latched fault, recovery resent until reported
 ```
 
 | Verdict | What leaves the switch |
 | --- | --- |
 | Pass | Setpoints. Commit only if the request already had it. |
 | Inhibit | Setpoints. Commit forced off. |
-| Revert | No setpoints. One recovery-mode command, then silence. |
+| Revert | No setpoints. The recovery mode, resent on a bounded schedule with fallbacks until the flight controller reports it (`docs/recovery.md`). |
 
 Recovery mode comes from config: `rtl`, `loiter`, or `land`. The switch has no buried default.
 
@@ -88,10 +88,17 @@ A spec change is a process restart and a golden-trace review. There is no hot re
 | Fence | `rta-host/src/fence.rs` | Trips on the stopping-distance margin |
 | Monitor | `spec/monitor.lola` | Thresholds live here, not in Rust |
 | Tick | `rta-host/src/eval.rs` | One record, one `accept_event` |
-| Deadline | `rta-host/src/tick.rs` | Late pass is discarded |
+| Deadline | `rta-host/src/eval_worker.rs`, `docs/deadline.md` | Preemptive: evaluation on a worker thread; a late or hung evaluation reverts within one deadline and latches |
 | Switch | `rta-switch` | Setpoints or mode, never both |
 | Link | `rta-host/src/link.rs` | UDP binds. Serial is not built. |
 | Runtime loop | `rta-host/src/runtime.rs`, `docs/runtime.md` | Tick, receive, and watchdog threads. Tested against a fake flight controller, not PX4 SITL. |
+| Startup gate | `rta-host/src/gate.rs`, `docs/startup.md` | Monitor only while disarmed; arm before ready latches `not_ready_at_arm` |
+| Recovery | `rta-host/src/recovery.rs`, `docs/recovery.md` | Resent until the flight controller reports the mode; RTL and land fallbacks; `COMMAND_ACK` read |
+| Command out | `rta-host/src/command_out.rs`, `docs/icd-fc.md` | PX4 AUTO sub-modes; setpoints are position and yaw to the heard flight controller |
+| Per-tick memory | `docs/runtime.md` | No allocation on the tick thread in steady state; the tick log stays byte-identical |
+| Panics | `docs/panics.md` | Denied in host code outside tests; a release build aborts and the flight controller's failsafe takes over |
+| Document checks | `rta-docs`, `docs/doc-checks.md` | Not linked into a flight build; run by `cargo test --workspace` |
+| CI | `.github/workflows`, `docs/ci.md` | Pinned actions, read-only tokens, release, aarch64, SITL stand-in, fuzz smoke |
 | Evidence | `scripts/evidence.sh` | SBOM and provenance hook |
 
 ## Missing features
@@ -100,10 +107,8 @@ These are not on `main`. The issues stay open until the acceptance tests exist.
 
 ```mermaid
 flowchart TD
-    built[On main: record, spec, switch, stub link]
-    built --> link[MAVLink heartbeat and command out]
-    built --> watch[Watchdog thread]
-    built --> dispatch[Reported-mode dispatch]
+    built[On main: record, spec, switch, runtime loop, link, watchdog, recovery]
+    built --> replay[Fixture replay through the interpreter]
     built --> gaps[Autonomy gaps]
     gaps --> override[Pilot override]
     gaps --> energy[Energy to rally]
@@ -117,13 +122,6 @@ flowchart TD
 
 | Feature | Why it is missing | Issue |
 | --- | --- | --- |
-| Reported-mode dispatch | Revert should send the recovery mode only when the flight controller is not already in it. | [#17](https://github.com/MatthewK84/AuToBoTs/issues/17) |
-| No-verdict path | A tick with no verdict must call the switch as `Revert`. | [#18](https://github.com/MatthewK84/AuToBoTs/issues/18) |
-| Watchdog thread | Missed published ticks must command recovery without calling the interpreter. The thread runs in `runtime.rs`; the issue stays open until a SITL run. | [#19](https://github.com/MatthewK84/AuToBoTs/issues/19) |
-| MAVLink heartbeat | The companion must be visible to the flight controller within 1.5 s. The link binds and heartbeats at 1 Hz in `runtime.rs`; no PX4 SITL run is recorded. | [#20](https://github.com/MatthewK84/AuToBoTs/issues/20) |
-| Dialect state inputs | Position and heartbeat message ids are not written in `docs/mavlink.md`. | [#21](https://github.com/MatthewK84/AuToBoTs/issues/21) |
-| Tracker port | Confidence and range need a fake tracker trait. No video decode. | [#22](https://github.com/MatthewK84/AuToBoTs/issues/22) |
-| Command out | Mode and setpoints are dialect messages in `command_out.rs` and leave the runtime loop. Setpoint yaw and type mask are not reviewed. | [#23](https://github.com/MatthewK84/AuToBoTs/issues/23) |
 | Fixture replay | `spec/fixtures/verdicts.json` is not yet run through the interpreter. | M7.3 |
 | Pilot override | A stick, a mode change, or RC takeover must beat the companion in the same tick. | [#179](https://github.com/MatthewK84/AuToBoTs/issues/179) |
 | Energy to rally | Revert while the rally is still reachable, not after it is not. | [#180](https://github.com/MatthewK84/AuToBoTs/issues/180) |
@@ -142,6 +140,8 @@ flowchart TD
 - `rta-spec` holds the input record and the verdicts. No sockets.
 - `rta-switch` is a pure function. No interpreter and no MAVLink.
 - `rta-host` is the binary. Config, clock, interpreter, link, and log.
+- `rta-filter` is the safety-filter contract. It reshapes a setpoint and never builds a command.
+- `rta-tracker` owns frame ingress and reports confidence and range. The host does not decode.
 - `rta-replay` re-evaluates a tick log against the spec.
 - `rta-docs` holds the document and source-text checks. Not flight code; no binary links it (`docs/doc-checks.md`).
 
@@ -157,6 +157,12 @@ cargo deny check
 ```
 
 `scripts/wait-ci.sh` blocks until the push run for this commit finishes. It exits non-zero if CI fails.
+
+The full list of checks, and how changes are made here, is in `CONTRIBUTING.md`. Changes are listed in `CHANGELOG.md`.
+
+## License
+
+Apache License, Version 2.0. See `LICENSE`.
 
 `scripts/close-issue.sh 24` runs that wait, then closes the issue. A commit that contains `Issue: 24` is closed by CI after compile, deny, and evidence pass. A commit with no issue line closes nothing.
 

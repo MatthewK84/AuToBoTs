@@ -1,0 +1,11 @@
+# Build output.
+/target/
+# LLVM coverage scratch from scripts/coverage.sh and instrumented test runs.
+*.profraw
+# Scratch from scripts/sitl-trips.sh and scripts/sitl.sh, written at the repository root.
+# The committed artifact crates/rta-host/fixtures/sitl-timing.txt is not matched.
+/trips/
+/sitl.log
+/sitl-timing.txt
+# A local run of rta-host with config/example.toml.
+/rta.log
