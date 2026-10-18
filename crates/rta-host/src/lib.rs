@@ -9,6 +9,7 @@ pub mod config;
 pub mod coverage_gate;
 pub mod degraded;
 pub mod eval;
+pub mod eval_worker;
 pub mod event;
 pub mod fail_closed;
 pub mod fault;

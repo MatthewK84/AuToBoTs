@@ -8,14 +8,13 @@
 use crate::clock::age_ms;
 use crate::command_out::{reported_mode, to_message};
 use crate::config::{self, Config};
-use crate::eval::Evaluator;
+use crate::eval_worker::{EvalWorker, Outcome};
 use crate::fail_closed::{FailClosed, TickCase};
 use crate::fence::{fence_ok, FenceInput};
 use crate::link::{LinkError, UdpLink};
 use crate::link_age::{LinkAge, LinkMessage};
 use crate::mavlink_link::{decode_each, encode, heartbeat, MAX_FRAME};
 use crate::mode::ModeSender;
-use crate::monitor::BuiltMonitor;
 use crate::stale::present_track;
 use crate::tick_log::{command_name, TickLog, TickRecord};
 use crate::watchdog::Watchdog;
@@ -262,11 +261,12 @@ pub struct RunOptions {
     pub stop: Arc<AtomicBool>,
 }
 
-/// Run until `stop` or `max_ticks`. Startup has already loaded config, built the monitor,
+/// Run until `stop` or `max_ticks`. Startup has already loaded config, built the monitor on
+/// the evaluation worker,
 /// opened the log, and bound the link, in that order (`docs/startup.md`).
 pub fn run<W: Write>(
     config: &Config,
-    monitor: &mut BuiltMonitor,
+    mut worker: EvalWorker,
     log: &mut TickLog<W>,
     spec_hash: u64,
     link: UdpLink,
@@ -303,7 +303,6 @@ pub fn run<W: Write>(
     };
 
     let mut sender = Sender::new(link, config);
-    let mut evaluator = Evaluator::default();
     let mut closed = FailClosed::default();
     let mut report = RunReport::default();
     let mut log_failed = false;
@@ -326,16 +325,20 @@ pub fn run<W: Write>(
         let mut reasons = Vec::new();
         let (verdict, late, eval_ms, presented) = match present(config, &vehicle, now_ms) {
             Ok(presented) => {
-                let started = Instant::now();
-                let result = evaluator.tick(monitor, &presented.record, now_ms);
-                let took = started.elapsed();
-                reasons = result.reasons;
-                (
-                    Some(result.verdict),
-                    took > deadline,
-                    u64::try_from(took.as_millis()).unwrap_or(u64::MAX),
-                    Some(presented),
-                )
+                // The tick thread waits at most `deadline` for the worker, whether or not the
+                // evaluator returns. A miss latches like an interpreter fault.
+                let millis = |took: Duration| u64::try_from(took.as_millis()).unwrap_or(u64::MAX);
+                match worker.evaluate(presented.record.clone(), now_ms, deadline) {
+                    Outcome::Done { result, took } => {
+                        reasons = result.reasons;
+                        (Some(result.verdict), false, millis(took), Some(presented))
+                    }
+                    Outcome::Late { took } => (None, true, millis(took), Some(presented)),
+                    Outcome::Busy | Outcome::Gone | Outcome::Faulted => {
+                        reasons.push("eval_fault".to_string());
+                        (None, false, 0, Some(presented))
+                    }
+                }
             }
             Err(_) => {
                 reasons.push("record".to_string());
@@ -345,8 +348,9 @@ pub fn run<W: Write>(
         if late {
             reasons.push("late".to_string());
         }
-        // A sent recovery or a failed log write latches Revert until restart.
-        let latched = shared.recovery_sent.load(Ordering::SeqCst) || log_failed;
+        // A sent recovery, a failed log write, or an evaluation fault latches Revert until
+        // restart.
+        let latched = shared.recovery_sent.load(Ordering::SeqCst) || log_failed || worker.faulted();
         if latched {
             reasons.push("latched".to_string());
         }
@@ -438,6 +442,7 @@ pub fn run<W: Write>(
         shared.send_recovery(&mut sender, recovery, target);
     }
     let _ = log.flush();
+    worker.shutdown();
     let _ = receiver.join();
     let _ = watchdog.join();
     report.recovery_sent = shared.recovery_sent.load(Ordering::SeqCst);
@@ -521,6 +526,7 @@ fn spawn_watchdog(
 mod tests {
     use super::*;
     use crate::command_out::{custom_mode, PX4_MAIN_MODE_AUTO, PX4_SUB_MODE_AUTO_RTL};
+    use crate::eval_worker::{Evaluate, SpecEvaluator};
     use crate::link::{open, Endpoint};
     use crate::monitor::build_once;
     use mavlink::dialects::common::{
@@ -577,10 +583,13 @@ a_max = 3.0
         path
     }
 
+    /// One `DO_SET_MODE` as the fake received it: param1, param2, param3, arrival.
+    type SetMode = (f32, f32, f32, Instant);
+
     /// What the fake flight controller saw from the host.
     #[derive(Debug, Default)]
     struct Seen {
-        set_mode: Vec<(f32, f32, f32, Instant)>,
+        set_mode: Vec<SetMode>,
         setpoints: usize,
         heartbeats: usize,
     }
@@ -635,6 +644,22 @@ a_max = 3.0
                     let _ = socket.send_to(&buffer[..count], host);
                 };
                 while !stop.load(Ordering::SeqCst) {
+                    // Position before heartbeat. The host commands only after it has heard a
+                    // heartbeat, and a heartbeat with no fix yet is a real Revert. Sending the
+                    // fix first keeps the start of every test nominal.
+                    let (x, y, z) = *lock(&position);
+                    send(
+                        &MavMessage::LOCAL_POSITION_NED(LOCAL_POSITION_NED_DATA {
+                            time_boot_ms: 0,
+                            x,
+                            y,
+                            z,
+                            vx: 0.0,
+                            vy: 0.0,
+                            vz: 0.0,
+                        }),
+                        &mut sequence,
+                    );
                     if last_beat.is_none_or(|at| at.elapsed() >= Duration::from_millis(100)) {
                         send(
                             &MavMessage::HEARTBEAT(HEARTBEAT_DATA {
@@ -649,19 +674,6 @@ a_max = 3.0
                         );
                         last_beat = Some(Instant::now());
                     }
-                    let (x, y, z) = *lock(&position);
-                    send(
-                        &MavMessage::LOCAL_POSITION_NED(LOCAL_POSITION_NED_DATA {
-                            time_boot_ms: 0,
-                            x,
-                            y,
-                            z,
-                            vx: 0.0,
-                            vy: 0.0,
-                            vz: 0.0,
-                        }),
-                        &mut sequence,
-                    );
                     if let Ok((count, _)) = socket.recv_from(&mut inbound) {
                         decode_each(&inbound[..count], |_, message| {
                             let mut seen = lock(&seen);
@@ -707,6 +719,15 @@ a_max = 3.0
         SocketAddr::from(([127, 0, 0, 1], link.local_addr().unwrap().port()))
     }
 
+    fn spec_worker() -> EvalWorker {
+        EvalWorker::start(|| {
+            build_once(SPEC)
+                .map(SpecEvaluator::new)
+                .map_err(|err| format!("{err:?}"))
+        })
+        .unwrap()
+    }
+
     fn options(ticks: u64) -> RunOptions {
         RunOptions {
             max_ticks: Some(ticks),
@@ -726,11 +747,11 @@ a_max = 3.0
             thread::sleep(Duration::from_millis(900));
             *lock(&position) = (600.0, 600.0, -30.0);
         });
-        let mut monitor = build_once(SPEC).unwrap();
+        let worker = spec_worker();
         let mut log = TickLog::open(&path, config.log.flush_every_n, 7).unwrap();
         let report = run(
             &config,
-            &mut monitor,
+            worker,
             &mut log,
             7,
             link,
@@ -815,18 +836,9 @@ a_max = 3.0
             hold: Duration::from_millis(1_200),
             window: Arc::clone(&window),
         };
-        let mut monitor = build_once(SPEC).unwrap();
+        let worker = spec_worker();
         let mut log = TickLog::open(&path, config.log.flush_every_n, 0).unwrap();
-        let report = run(
-            &config,
-            &mut monitor,
-            &mut log,
-            0,
-            link,
-            &mut stall,
-            options(9),
-        )
-        .unwrap();
+        let report = run(&config, worker, &mut log, 0, link, &mut stall, options(9)).unwrap();
         fc.stop.store(true, Ordering::SeqCst);
         fc_thread.join().unwrap();
 
@@ -857,6 +869,157 @@ a_max = 3.0
         let _ = std::fs::remove_file(&path);
     }
 
+    /// The real spec until call `at`, then hung (never returns while `release` is unset) or
+    /// slow by `slow`.
+    struct Faulty {
+        inner: SpecEvaluator,
+        calls: u64,
+        at: u64,
+        slow: Option<Duration>,
+        release: Arc<AtomicBool>,
+        faulted_at: Arc<Mutex<Option<Instant>>>,
+    }
+
+    impl Evaluate for Faulty {
+        fn evaluate(&mut self, record: &InputRecord, at_ms: u64) -> crate::eval::TickResult {
+            self.calls += 1;
+            if self.calls == self.at {
+                *lock(&self.faulted_at) = Some(Instant::now());
+                match self.slow {
+                    Some(delay) => thread::sleep(delay),
+                    None => {
+                        while !self.release.load(Ordering::SeqCst) {
+                            thread::sleep(Duration::from_millis(5));
+                        }
+                    }
+                }
+            }
+            self.inner.evaluate(record, at_ms)
+        }
+    }
+
+    /// Run the fake PX4 against an evaluator that faults on call 6, and return what it saw.
+    fn run_with_faulty_eval(
+        name: &str,
+        slow: Option<Duration>,
+    ) -> (RunReport, Vec<SetMode>, Instant, String) {
+        let fc = FakeFc::bind();
+        let path = log_path(name);
+        let config = config(fc.port(), path.to_str().unwrap());
+        let link = host_link(&fc);
+        let fc_thread = fc.spawn(loopback(&link));
+        let release = Arc::new(AtomicBool::new(false));
+        let faulted_at = Arc::new(Mutex::new(None));
+        let worker = {
+            let release = Arc::clone(&release);
+            let faulted_at = Arc::clone(&faulted_at);
+            EvalWorker::start(move || {
+                let inner = build_once(SPEC)
+                    .map(SpecEvaluator::new)
+                    .map_err(|err| format!("{err:?}"))?;
+                Ok(Faulty {
+                    inner,
+                    calls: 0,
+                    at: 6,
+                    slow,
+                    release,
+                    faulted_at,
+                })
+            })
+            .unwrap()
+        };
+        let mut log = TickLog::open(&path, 1, 0).unwrap();
+        let started = Instant::now();
+        let report = run(
+            &config,
+            worker,
+            &mut log,
+            0,
+            link,
+            &mut StubComplex,
+            options(10),
+        )
+        .unwrap();
+        // A hung evaluator must not hold up shutdown.
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "{:?}",
+            started.elapsed()
+        );
+        release.store(true, Ordering::SeqCst);
+        fc.stop.store(true, Ordering::SeqCst);
+        fc_thread.join().unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        let faulted_at = lock(&faulted_at).unwrap_or_else(|| panic!("never faulted\n{text}"));
+        let seen = lock(&fc.seen).set_mode.clone();
+        (report, seen, faulted_at, text)
+    }
+
+    fn assert_reverted_on_the_faulted_tick(
+        report: &RunReport,
+        seen: &[SetMode],
+        faulted_at: Instant,
+        text: &str,
+    ) {
+        // The tick thread sent it, inside one deadline plus link slack. The watchdog did not
+        // have to.
+        assert!(report.recovery_sent, "{report:?}");
+        assert!(!report.watchdog_fired, "{report:?}");
+        assert_eq!(report.ticks, 10, "{report:?}");
+        assert_eq!(seen.len(), 1, "{seen:?}");
+        let (param1, param2, param3, at) = seen[0];
+        assert_eq!((param1, param2, param3), (1.0, 4.0, 5.0));
+        // Nothing was commanded before the fault, and the command followed it promptly. The
+        // bound is loose for a loaded runner; the deadline itself is checked by eval_ms below.
+        assert!(at >= faulted_at, "recovery before the fault\n{text}");
+        let after = at.duration_since(faulted_at);
+        assert!(after < Duration::from_millis(500), "{after:?}\n{text}");
+        let lines: Vec<&str> = text.lines().filter(|l| l.starts_with("tick=")).collect();
+        assert_eq!(lines.len(), 10, "{text}");
+        // The first line that names the fault is the faulted tick, within the run.
+        let faulted = lines
+            .iter()
+            .find(|line| line.contains("late"))
+            .unwrap_or_else(|| panic!("{text}"));
+        assert!(faulted.contains("latched"), "{text}");
+        // No earlier tick reverted: the loop was nominal until the fault.
+        for line in lines.iter().take_while(|line| *line != faulted) {
+            assert!(
+                line.contains("no_fc") || line.contains("verdict=inhibit"),
+                "{line}\n{text}"
+            );
+        }
+        assert!(faulted.contains("verdict=revert"), "{faulted}");
+        assert!(faulted.contains("command=mode"), "{text}");
+        let eval_ms: u64 = faulted
+            .split_whitespace()
+            .find_map(|field| field.strip_prefix("eval_ms="))
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(u64::MAX);
+        // The tick thread gave up at the deadline, not when the evaluator finished.
+        assert!((50..250).contains(&eval_ms), "{faulted}");
+        // Every later tick stays Revert without asking the worker again.
+        let index = lines.iter().position(|line| line == faulted).unwrap();
+        for line in &lines[index + 1..] {
+            assert!(line.contains("verdict=revert"), "{line}");
+            assert!(line.contains("eval_fault"), "{line}");
+        }
+    }
+
+    #[test]
+    fn a_hung_evaluator_reverts_within_one_deadline_and_the_fc_gets_recovery() {
+        let (report, seen, faulted_at, text) = run_with_faulty_eval("hung", None);
+        assert_reverted_on_the_faulted_tick(&report, &seen, faulted_at, &text);
+    }
+
+    #[test]
+    fn a_slow_evaluator_past_the_deadline_reverts_and_latches() {
+        let (report, seen, faulted_at, text) =
+            run_with_faulty_eval("slow", Some(Duration::from_millis(80)));
+        assert_reverted_on_the_faulted_tick(&report, &seen, faulted_at, &text);
+    }
+
     #[test]
     fn nothing_is_commanded_before_the_flight_controller_is_heard() {
         let silent = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -874,11 +1037,11 @@ a_max = 3.0
             RECV_TIMEOUT,
         )
         .unwrap();
-        let mut monitor = build_once(SPEC).unwrap();
+        let worker = spec_worker();
         let mut log = TickLog::open(&path, 1, 0).unwrap();
         let report = run(
             &config,
-            &mut monitor,
+            worker,
             &mut log,
             0,
             link,
@@ -967,7 +1130,7 @@ mod doc_tests {
             "no_fc",
             "no_request",
             "latched",
-            "not preemptive",
+            "The deadline is preemptive.",
             "udpin:host:port",
             "No PX4 SITL run of this loop is recorded.",
         ] {

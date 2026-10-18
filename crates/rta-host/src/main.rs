@@ -4,7 +4,7 @@
 //! Startup is config, spec load, log open, then socket. The tick loop runs until SIGINT or
 //! `--ticks N`, then shuts down in order: stop setpoints, recovery mode, flush log, exit.
 
-use rta_host::{config, fault, link, monitor, runtime, tick_log};
+use rta_host::{config, eval_worker, fault, link, monitor, runtime, tick_log};
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -68,14 +68,20 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    let mut built = match monitor::build_once(&spec_text) {
-        Ok(built) => built,
+    let spec_hash = tick_log::spec_hash(spec_text.as_bytes());
+    // The monitor is built once, on the evaluation worker. A parse or type error exits here,
+    // before the log and the socket.
+    let worker = match eval_worker::EvalWorker::start(move || {
+        monitor::build_once(&spec_text)
+            .map(eval_worker::SpecEvaluator::new)
+            .map_err(|err| format!("{err:?}"))
+    }) {
+        Ok(worker) => worker,
         Err(err) => {
-            eprintln!("spec: {err:?}");
+            eprintln!("spec: {err}");
             return ExitCode::from(1);
         }
     };
-    let spec_hash = tick_log::spec_hash(spec_text.as_bytes());
     let mut tick_log = match tick_log::TickLog::open(
         Path::new(&config.log.path),
         config.log.flush_every_n,
@@ -111,7 +117,7 @@ fn main() -> ExitCode {
     let mut complex = rta_switch::StubComplex;
     match runtime::run(
         &config,
-        &mut built,
+        worker,
         &mut tick_log,
         spec_hash,
         link,

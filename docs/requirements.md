@@ -12,7 +12,7 @@ Frozen shall statements. Each row has an id, a hazard id, and a verification met
 | R-H4 | H4 | The system shall revert on a stale flight-controller heartbeat. The age limit is the `heartbeat_stale` row in `docs/spec-notes.md`. | test |
 | R-H5 | H5 | The system shall inhibit on a weak track inside commit range. The confidence and range limits are the `weak_track` and `inside_commit` rows in `docs/spec-notes.md`. | test |
 | R-H6 | H6 | The system shall reject a non-finite numeric input and revert. | test |
-| R-H7 | H7 | The system shall revert when monitor eval exceeds the deadline. The deadline is `deadline_ms` in config, not a copied number. | test |
+| R-H7 | H7 | The system shall revert when monitor eval exceeds the deadline, whether or not eval returns, and latch revert until process restart. The deadline is `deadline_ms` in config, not a copied number. | test |
 | R-H8 | H8 | The system shall latch revert on an interpreter load or accept error until process restart. | test |
 | R-H9 | H9 | The system shall not emit setpoints and a mode change in the same tick. `Command` is an enum. | test |
 | R-H10 | H10 | The system shall latch revert on a log write failure in flight until process restart. | test |
