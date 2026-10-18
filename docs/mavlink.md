@@ -1,6 +1,6 @@
 # MAVLink
 
-Dialect is common, pinned in M0.2. The link address is `udpout:host:port` or `serial:path:baud` from `link.endpoint`.
+Dialect is common, pinned in M0.2. The link address is `udp:host:port`, `udpin:host:port`, or `serial:path:baud` from `link.endpoint`. The forms are in `docs/runtime.md`. Serial is not built.
 
 Outbound heartbeat is `HEARTBEAT` at 1 Hz. System id and component id come from config. The component type is onboard controller, not a flight controller.
 

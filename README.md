@@ -90,7 +90,8 @@ A spec change is a process restart and a golden-trace review. There is no hot re
 | Tick | `rta-host/src/eval.rs` | One record, one `accept_event` |
 | Deadline | `rta-host/src/tick.rs` | Late pass is discarded |
 | Switch | `rta-switch` | Setpoints or mode, never both |
-| Link | `rta-host/src/link.rs` | UDP parses. Serial is not built. |
+| Link | `rta-host/src/link.rs` | UDP binds. Serial is not built. |
+| Runtime loop | `rta-host/src/runtime.rs`, `docs/runtime.md` | Tick, receive, and watchdog threads. Tested against a fake flight controller, not PX4 SITL. |
 | Evidence | `scripts/evidence.sh` | SBOM and provenance hook |
 
 ## Missing features
@@ -118,11 +119,11 @@ flowchart TD
 | --- | --- | --- |
 | Reported-mode dispatch | Revert should send the recovery mode only when the flight controller is not already in it. | [#17](https://github.com/MatthewK84/AuToBoTs/issues/17) |
 | No-verdict path | A tick with no verdict must call the switch as `Revert`. | [#18](https://github.com/MatthewK84/AuToBoTs/issues/18) |
-| Watchdog thread | Missed published ticks must command recovery without calling the interpreter. | [#19](https://github.com/MatthewK84/AuToBoTs/issues/19) |
-| MAVLink heartbeat | The companion must be visible to the flight controller within 1.5 s. The link only stub-binds. | [#20](https://github.com/MatthewK84/AuToBoTs/issues/20) |
+| Watchdog thread | Missed published ticks must command recovery without calling the interpreter. The thread runs in `runtime.rs`; the issue stays open until a SITL run. | [#19](https://github.com/MatthewK84/AuToBoTs/issues/19) |
+| MAVLink heartbeat | The companion must be visible to the flight controller within 1.5 s. The link binds and heartbeats at 1 Hz in `runtime.rs`; no PX4 SITL run is recorded. | [#20](https://github.com/MatthewK84/AuToBoTs/issues/20) |
 | Dialect state inputs | Position and heartbeat message ids are not written in `docs/mavlink.md`. | [#21](https://github.com/MatthewK84/AuToBoTs/issues/21) |
 | Tracker port | Confidence and range need a fake tracker trait. No video decode. | [#22](https://github.com/MatthewK84/AuToBoTs/issues/22) |
-| Command out | Mode and setpoints are not yet dialect messages. | [#23](https://github.com/MatthewK84/AuToBoTs/issues/23) |
+| Command out | Mode and setpoints are dialect messages in `command_out.rs` and leave the runtime loop. Setpoint yaw and type mask are not reviewed. | [#23](https://github.com/MatthewK84/AuToBoTs/issues/23) |
 | Fixture replay | `spec/fixtures/verdicts.json` is not yet run through the interpreter. | M7.3 |
 | Pilot override | A stick, a mode change, or RC takeover must beat the companion in the same tick. | [#179](https://github.com/MatthewK84/AuToBoTs/issues/179) |
 | Energy to rally | Revert while the rally is still reachable, not after it is not. | [#180](https://github.com/MatthewK84/AuToBoTs/issues/180) |

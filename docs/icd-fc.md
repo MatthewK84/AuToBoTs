@@ -18,11 +18,14 @@ This is the contract for the one link the adapter owns. There is no second socke
 | Message | Id | Effect |
 | --- | --- | --- |
 | `HEARTBEAT` | 0 | Resets `fc_heartbeat_age_ms` from local receive time. |
-| `GLOBAL_POSITION_INT` | 33 | Updates `alt_m` in meters from millimeters. Resets `fix_age_ms`. The sender timestamp is not an age. |
+| `GLOBAL_POSITION_INT` | 33 | Updates `alt_m` in meters from millimeters. Resets `fix_age_ms`. The sender timestamp is not an age. Not read by the runtime loop. |
+| `LOCAL_POSITION_NED` | 32 | Runtime loop fix: north `x` and east `y` in meters for the host fence, altitude `-z`. Resets `fix_age_ms` when all three are finite. |
 | `STATUSTEXT` | 253 | Logged. Does not change the record or the verdict. |
 | `SYS_STATUS` | 1 | Logged. Not a predicate. Battery and estimator fields are not read. |
 
-An unknown inbound message is dropped. It does not change an age.
+An unknown inbound message is dropped. It does not change an age. A `HEARTBEAT` whose autopilot is `MAV_AUTOPILOT_INVALID` is a ground station or another companion. It does not reset `fc_heartbeat_age_ms` or the reported mode.
+
+The runtime loop and its endpoint forms are in `docs/runtime.md`.
 
 ## Mode enum
 

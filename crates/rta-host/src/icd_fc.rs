@@ -12,6 +12,7 @@ pub const SENT: &[(&str, u32)] = &[
 pub const READ: &[(&str, u32)] = &[
     ("HEARTBEAT", 0),
     ("GLOBAL_POSITION_INT", 33),
+    ("LOCAL_POSITION_NED", 32),
     ("STATUSTEXT", 253),
     ("SYS_STATUS", 1),
 ];
