@@ -1,6 +1,7 @@
 //! MAVLink common link. Heartbeat out is 1 Hz. Inbound age uses local receive time.
 
 use crate::link::{Endpoint, LinkError};
+use crate::ring::{StatusLog, StatusText};
 use mavlink::dialects::common::{
     MavAutopilot, MavMessage, MavModeFlag, MavState, MavType, HEARTBEAT_DATA,
 };
@@ -93,7 +94,8 @@ pub struct VehicleState {
     pub fix_received_ms: Option<u64>,
     pub link_received_ms: Option<u64>,
     pub fc_heartbeat_ms: Option<u64>,
-    pub status_log: Vec<String>,
+    /// The last status texts, a fixed ring. A status-text flood does not grow it.
+    pub status_log: StatusLog,
 }
 
 pub fn apply(state: &mut VehicleState, inbound: &Inbound, now_ms: u64) {
@@ -107,7 +109,7 @@ pub fn apply(state: &mut VehicleState, inbound: &Inbound, now_ms: u64) {
             state.fix_received_ms = Some(now_ms);
             state.link_received_ms = Some(now_ms);
         }
-        Inbound::StatusText(text) => state.status_log.push(text.clone()),
+        Inbound::StatusText(text) => state.status_log.push(StatusText::new(text.as_bytes())),
         Inbound::Other => state.link_received_ms = Some(now_ms),
     }
 }
@@ -279,6 +281,25 @@ mod tests {
         assert_eq!(state.alt_m, Some(1.5));
         assert_eq!(state.fix_received_ms, Some(40));
         assert!(age_ms(state.fc_heartbeat_ms, 80) > age_ms(state.link_received_ms, 80));
+        assert_eq!(
+            state.status_log.last().map(StatusText::as_str),
+            Some("sys_status")
+        );
+    }
+
+    #[test]
+    fn a_status_text_flood_keeps_the_ring_bounded() {
+        let mut state = VehicleState::default();
+        for _ in 0..1_000 {
+            apply(&mut state, &Inbound::StatusText("x".repeat(200)), 1);
+        }
+        assert_eq!(state.status_log.len(), crate::ring::STATUS_LOG_CAPACITY);
+        let kept = state
+            .status_log
+            .last()
+            .map(StatusText::as_str)
+            .unwrap_or_default();
+        assert_eq!(kept.len(), crate::ring::STATUS_TEXT_BYTES);
     }
 
     #[test]

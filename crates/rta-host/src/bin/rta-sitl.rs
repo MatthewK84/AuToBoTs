@@ -7,6 +7,7 @@ use rta_host::fault::load_spec_file;
 use rta_host::link::{open, parse_endpoint};
 use rta_host::mavlink_link::MavLink;
 use rta_host::monitor::build_once;
+use rta_host::reason::{Reason, Reasons};
 use rta_host::runtime::recovery_of;
 use rta_host::sitl::{hover_record, hover_verdict, timing_header, EXAMPLE_ENDPOINT};
 use rta_host::spec::limits;
@@ -136,7 +137,11 @@ fn main() -> ExitCode {
         range_m: record.range_m(),
         verdict,
         filter_intervened: false,
-        reasons: vec!["not_sent".to_string()],
+        reasons: {
+            let mut reasons = Reasons::new();
+            reasons.push(Reason::NotSent);
+            reasons
+        },
         command: command_name(&command),
         eval_ms,
         spec_hash,

@@ -12,6 +12,8 @@
 //! Ready means a flight-controller `HEARTBEAT` has been heard and the position fix is no
 //! older than `ready_fix_age_ms`. Detail in `docs/startup.md`.
 
+use crate::reason::{Reason, Reasons};
+
 /// Which gate the runtime runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -67,23 +69,23 @@ impl Gate {
     }
 
     /// One tick. Pushes the gate's reason codes.
-    pub fn step(&mut self, now_ms: u64, inputs: Inputs, reasons: &mut Vec<String>) -> Decision {
+    pub fn step(&mut self, now_ms: u64, inputs: Inputs, reasons: &mut Reasons) -> Decision {
         self.ever_ready |= inputs.ready;
         let timed_out = !self.ever_ready && now_ms >= self.ready_timeout_ms;
         if timed_out {
-            reasons.push("ready_timeout".to_string());
+            reasons.push(Reason::ReadyTimeout);
         }
         let decision = match self.mode {
             Mode::Armed => self.armed_step(inputs, reasons),
             Mode::Immediate => self.immediate_step(inputs, timed_out, reasons),
         };
         if self.not_ready_at_arm {
-            reasons.push("not_ready_at_arm".to_string());
+            reasons.push(Reason::NotReadyAtArm);
         }
         decision
     }
 
-    fn armed_step(&mut self, inputs: Inputs, reasons: &mut Vec<String>) -> Decision {
+    fn armed_step(&mut self, inputs: Inputs, reasons: &mut Reasons) -> Decision {
         let armed = inputs.heard && inputs.armed;
         // An arm seen before readiness, including a first heartbeat that is already armed.
         if armed && !self.was_armed && !inputs.ready {
@@ -91,7 +93,7 @@ impl Gate {
         }
         self.was_armed = armed;
         if inputs.heard && !armed {
-            reasons.push("disarmed".to_string());
+            reasons.push(Reason::Disarmed);
         }
         Decision {
             act: armed,
@@ -103,11 +105,11 @@ impl Gate {
         &mut self,
         inputs: Inputs,
         timed_out: bool,
-        reasons: &mut Vec<String>,
+        reasons: &mut Reasons,
     ) -> Decision {
         self.opened |= inputs.ready || (inputs.heard && timed_out);
         if inputs.heard && !self.opened {
-            reasons.push("not_ready".to_string());
+            reasons.push(Reason::NotReady);
         }
         Decision {
             act: inputs.heard && self.opened,
@@ -131,9 +133,9 @@ mod tests {
     }
 
     fn step(gate: &mut Gate, now: u64, i: Inputs) -> (Decision, Vec<String>) {
-        let mut reasons = Vec::new();
+        let mut reasons = Reasons::new();
         let decision = gate.step(now, i, &mut reasons);
-        (decision, reasons)
+        (decision, reasons.codes())
     }
 
     #[test]

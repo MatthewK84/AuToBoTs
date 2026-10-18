@@ -1,5 +1,7 @@
 //! Read path. Age uses local receive time. A status text does not change the record.
 
+use crate::ring::{StatusLog, StatusText};
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PartialRecord {
     pub alt_m: Option<f64>,
@@ -7,7 +9,8 @@ pub struct PartialRecord {
     pub heartbeat_received_ms: Option<u64>,
     pub track_conf: Option<f64>,
     pub range_m: Option<f64>,
-    pub status_log: Vec<String>,
+    /// The last status texts, a fixed ring.
+    pub status_log: StatusLog,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -30,7 +33,7 @@ pub fn apply(bytes: &[u8], now_ms: u64, record: &mut PartialRecord) -> Result<()
         Some(3) => {
             record
                 .status_log
-                .push(String::from_utf8_lossy(&bytes[1..]).to_string());
+                .push(StatusText::new(bytes.get(1..).unwrap_or_default()));
             Ok(())
         }
         _ => Err(ReadError::Unknown),
@@ -67,6 +70,7 @@ mod tests {
         apply(&bytes, 80, &mut record).unwrap();
         assert_eq!(record.alt_m, Some(2.0));
         assert_eq!(record.fix_received_ms, None);
-        assert_eq!(record.status_log, vec!["gps fail".to_string()]);
+        let texts: Vec<&str> = record.status_log.iter().map(StatusText::as_str).collect();
+        assert_eq!(texts, ["gps fail"]);
     }
 }
