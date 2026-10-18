@@ -4,6 +4,19 @@
 //! Startup is config, spec load, log open, then socket. The tick loop runs until SIGINT or
 //! `--ticks N`, then shuts down in order: stop setpoints, recovery mode, flush log, exit.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::todo,
+        clippy::unimplemented
+    )
+)]
+
 use rta_host::{config, eval_worker, fault, link, monitor, runtime, spec, tick_log};
 
 use std::path::Path;

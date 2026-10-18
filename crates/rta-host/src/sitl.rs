@@ -23,14 +23,20 @@ pub fn distribution(samples_ms: &[u64]) -> String {
     }
     let mut ordered = samples_ms.to_vec();
     ordered.sort_unstable();
-    let at = |q: f64| ordered[((ordered.len() - 1) as f64 * q) as usize];
+    let last = ordered.len().saturating_sub(1);
+    let at = |q: f64| {
+        ordered
+            .get((last as f64 * q) as usize)
+            .copied()
+            .unwrap_or_default()
+    };
     format!(
         "count={} min={} p50={} p95={} max={}",
         ordered.len(),
-        ordered[0],
+        ordered.first().copied().unwrap_or_default(),
         at(0.50),
         at(0.95),
-        ordered[ordered.len() - 1]
+        ordered.last().copied().unwrap_or_default()
     )
 }
 

@@ -21,7 +21,11 @@ pub enum ReadError {
 pub fn apply(bytes: &[u8], now_ms: u64, record: &mut PartialRecord) -> Result<(), ReadError> {
     match bytes.first().copied() {
         Some(1) if bytes.len() == 5 => {
-            let alt_mm = i32::from_le_bytes(bytes[1..5].try_into().unwrap());
+            let raw = bytes
+                .get(1..5)
+                .and_then(|slice| <[u8; 4]>::try_from(slice).ok())
+                .ok_or(ReadError::Unknown)?;
+            let alt_mm = i32::from_le_bytes(raw);
             record.alt_m = Some(alt_mm as f64 / 1_000.0);
             record.fix_received_ms = Some(now_ms);
             Ok(())

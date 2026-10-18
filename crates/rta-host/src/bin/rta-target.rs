@@ -1,5 +1,18 @@
 //! Ten-minute eval measurement. Does not change the deadline.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::todo,
+        clippy::unimplemented
+    )
+)]
+
 use rta_host::config::parse_str;
 use rta_host::eval::Evaluator;
 use rta_host::mode::ModeSender;
@@ -14,12 +27,15 @@ use std::time::{Duration, Instant};
 
 fn cpu_seconds() -> f64 {
     let text = fs::read_to_string("/proc/self/stat").unwrap_or_default();
-    let fields: Vec<&str> = text.split_whitespace().collect();
-    if fields.len() < 15 {
-        return 0.0;
-    }
-    let ticks = fields[13].parse::<f64>().unwrap_or(0.0) + fields[14].parse::<f64>().unwrap_or(0.0);
-    ticks / 100.0
+    // utime and stime are fields 14 and 15 of /proc/self/stat. A short or unreadable line
+    // reads as zero.
+    let field = |index: usize| {
+        text.split_whitespace()
+            .nth(index)
+            .and_then(|value| value.parse::<f64>().ok())
+            .unwrap_or(0.0)
+    };
+    (field(13) + field(14)) / 100.0
 }
 
 fn main() -> ExitCode {
@@ -28,10 +44,28 @@ fn main() -> ExitCode {
         .unwrap_or_else(|| "10".into())
         .parse()
         .unwrap_or(10);
-    let config = parse_str(include_str!("../../../../config/sitl.toml")).expect("config");
+    let config = match parse_str(include_str!("../../../../config/sitl.toml")) {
+        Ok(config) => config,
+        Err(err) => {
+            eprintln!("target: config: {err}");
+            return ExitCode::from(1);
+        }
+    };
     let spec = include_str!("../../../../spec/monitor.lola");
-    let mut built = build_once(spec).expect("spec");
-    let record = hover_record(&config).expect("hover");
+    let mut built = match build_once(spec) {
+        Ok(built) => built,
+        Err(err) => {
+            eprintln!("target: spec: {err:?}");
+            return ExitCode::from(1);
+        }
+    };
+    let record = match hover_record(&config) {
+        Ok(record) => record,
+        Err(err) => {
+            eprintln!("target: hover record: {err}");
+            return ExitCode::from(1);
+        }
+    };
     let deadline_ms = config.tick.deadline_ms;
     let start_cpu = cpu_seconds();
     let started = Instant::now();

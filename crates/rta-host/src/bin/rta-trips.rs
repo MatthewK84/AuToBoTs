@@ -1,5 +1,18 @@
 //! Scripted trips. Assertions read the tick log, not a ground station.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::todo,
+        clippy::unimplemented
+    )
+)]
+
 use rta_host::command_out::{custom_mode, reported_mode};
 use rta_host::config::parse_str;
 use rta_host::eval::Evaluator;
@@ -59,25 +72,43 @@ fn main() -> ExitCode {
         }
     };
     let recovery = RecoveryMode::Rtl;
+    let record = |name: &str, fence_ok, track_conf, range_m, heartbeat_ms| {
+        InputRecord::try_new(
+            30.0,
+            fence_ok,
+            10.0,
+            track_conf,
+            range_m,
+            10.0,
+            heartbeat_ms,
+        )
+        .map_err(|err| eprintln!("trips: {name} record: {err}"))
+    };
+    let (Ok(fence), Ok(heartbeat), Ok(weak)) = (
+        record("fence", false, 0.9, 400.0, 10.0),
+        record("heartbeat", true, 0.9, 400.0, 5_000.0),
+        record("weak", true, 0.2, 40.0, 10.0),
+    ) else {
+        return ExitCode::from(1);
+    };
     let trips = [
         Trip {
             name: "fence",
-            record: InputRecord::try_new(30.0, false, 10.0, 0.9, 400.0, 10.0, 10.0).expect("fence"),
+            record: fence,
             expect: Verdict::Revert,
             commit: false,
             report: Some(recovery),
         },
         Trip {
             name: "heartbeat",
-            record: InputRecord::try_new(30.0, true, 10.0, 0.9, 400.0, 10.0, 5_000.0)
-                .expect("heartbeat"),
+            record: heartbeat,
             expect: Verdict::Revert,
             commit: false,
             report: None,
         },
         Trip {
             name: "weak",
-            record: InputRecord::try_new(30.0, true, 10.0, 0.2, 40.0, 10.0, 10.0).expect("weak"),
+            record: weak,
             expect: Verdict::Inhibit,
             commit: false,
             report: None,

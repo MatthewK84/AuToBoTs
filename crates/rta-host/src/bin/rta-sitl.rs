@@ -1,5 +1,18 @@
 //! Connect to the SITL port, send one heartbeat, and log a nominal hover.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::todo,
+        clippy::unimplemented
+    )
+)]
+
 use rta_host::config::load;
 use rta_host::eval::Evaluator;
 use rta_host::fail_closed::{FailClosed, TickCase};

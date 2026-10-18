@@ -1,5 +1,18 @@
 //! Host library. The replay binary reuses the monitor.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::todo,
+        clippy::unimplemented
+    )
+)]
+
 pub mod bundle;
 pub mod claims;
 pub mod clock;
@@ -26,6 +39,7 @@ pub mod mode;
 pub mod monitor;
 pub mod operator;
 pub mod packet;
+pub mod panic_policy;
 pub mod planning;
 pub mod quarantine;
 pub mod read;

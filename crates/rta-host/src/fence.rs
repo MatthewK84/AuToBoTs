@@ -30,12 +30,17 @@ pub fn fence_ok(point: [f64; 2], alt_m: f64, fence: FenceInput<'_>) -> bool {
     distance_to_boundary(point, fence.polygon) > margin
 }
 
+/// Each edge `(a, b)` of the closed polygon, the last vertex back to the first.
+fn edges(polygon: &[[f64; 2]]) -> impl Iterator<Item = ([f64; 2], [f64; 2])> + '_ {
+    polygon
+        .iter()
+        .copied()
+        .zip(polygon.iter().copied().cycle().skip(1))
+}
+
 fn inside(point: [f64; 2], polygon: &[[f64; 2]]) -> bool {
     let mut crossed = false;
-    let n = polygon.len();
-    for i in 0..n {
-        let a = polygon[i];
-        let b = polygon[(i + 1) % n];
+    for (a, b) in edges(polygon) {
         let intersect = ((a[1] > point[1]) != (b[1] > point[1]))
             && (point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]);
         if intersect {
@@ -46,10 +51,9 @@ fn inside(point: [f64; 2], polygon: &[[f64; 2]]) -> bool {
 }
 
 fn distance_to_boundary(point: [f64; 2], polygon: &[[f64; 2]]) -> f64 {
-    let n = polygon.len();
     let mut best = f64::MAX;
-    for i in 0..n {
-        best = best.min(distance_to_segment(point, polygon[i], polygon[(i + 1) % n]));
+    for (a, b) in edges(polygon) {
+        best = best.min(distance_to_segment(point, a, b));
     }
     best
 }
