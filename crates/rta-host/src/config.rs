@@ -143,10 +143,12 @@ fn validate(config: &Config) -> Result<(), ConfigError> {
         ));
     }
     let endpoint = &config.link.endpoint;
-    let ok = endpoint.starts_with("udp:") || endpoint.starts_with("serial:");
+    let ok = endpoint.starts_with("udp:")
+        || endpoint.starts_with("udpin:")
+        || endpoint.starts_with("serial:");
     if !ok {
         return Err(ConfigError(
-            "link.endpoint must start with udp: or serial:".into(),
+            "link.endpoint must start with udp:, udpin:, or serial:".into(),
         ));
     }
     Ok(())

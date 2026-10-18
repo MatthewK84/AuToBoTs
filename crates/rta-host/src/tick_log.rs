@@ -86,6 +86,14 @@ impl<W: Write> TickLog<W> {
     }
 }
 
+impl<W: Write> TickLog<W> {
+    /// Flush whatever `flush_every_n` has not. Shutdown calls this after the recovery mode.
+    pub fn flush(&mut self) -> io::Result<()> {
+        self.since_flush = 0;
+        self.writer.flush()
+    }
+}
+
 pub fn command_name(command: &SwitchCommand) -> String {
     match command {
         SwitchCommand::Mode { .. } => "mode".into(),

@@ -6,7 +6,7 @@ pub enum LinkMessage {
     StatusText,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LinkAge {
     last_command_ms: Option<u64>,
 }

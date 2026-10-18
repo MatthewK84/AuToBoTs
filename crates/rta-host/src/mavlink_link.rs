@@ -26,13 +26,14 @@ impl MavLink {
     pub fn open(endpoint: &Endpoint, system_id: u8, component_id: u8) -> Result<Self, LinkError> {
         let address = match endpoint {
             Endpoint::Udp { host, port } => format!("udpout:{host}:{port}"),
+            Endpoint::UdpIn { host, port } => format!("udpin:{host}:{port}"),
             Endpoint::Serial { path, baud } => format!("serial:{path}:{baud}"),
         };
         let connection = mavlink::connect::<MavMessage>(&address).map_err(|err| {
             eprintln!("mavlink connect {address}: {err}");
             match endpoint {
                 Endpoint::Serial { .. } => LinkError::SerialNotBuilt,
-                Endpoint::Udp { .. } => LinkError::BadEndpoint,
+                Endpoint::Udp { .. } | Endpoint::UdpIn { .. } => LinkError::BadEndpoint,
             }
         })?;
         Ok(Self {
@@ -117,6 +118,37 @@ pub fn age_ms(received: Option<u64>, now_ms: u64) -> f64 {
         None => f64::MAX,
     }
 }
+
+/// Largest MAVLink v2 frame: magic, header, 255-byte payload, checksum, signature.
+pub const MAX_FRAME: usize = 280;
+
+/// Encode one v2 frame into a fixed buffer. No allocation.
+pub fn encode(
+    header: MavHeader,
+    message: &MavMessage,
+    buffer: &mut [u8; MAX_FRAME],
+) -> Result<usize, String> {
+    let mut cursor = std::io::Cursor::new(&mut buffer[..]);
+    mavlink::write_v2_msg(&mut cursor, header, message).map_err(|err| err.to_string())
+}
+
+/// Decode every v1 or v2 frame in one datagram, at most `MAX_FRAMES_PER_DATAGRAM`. A frame
+/// that fails its checksum or is unknown to the dialect ends the datagram.
+pub fn decode_each<F>(datagram: &[u8], mut each: F)
+where
+    F: FnMut(&MavHeader, &MavMessage),
+{
+    let mut reader = mavlink::peek_reader::PeekReader::<_, MAX_FRAME>::new(datagram);
+    for _ in 0..MAX_FRAMES_PER_DATAGRAM {
+        match mavlink::read_any_msg::<MavMessage, _>(&mut reader) {
+            Ok((header, message)) => each(&header, &message),
+            Err(_) => break,
+        }
+    }
+}
+
+/// Bound on frames read from one datagram.
+pub const MAX_FRAMES_PER_DATAGRAM: usize = 16;
 
 pub fn classify(message: &MavMessage) -> Inbound {
     match message {

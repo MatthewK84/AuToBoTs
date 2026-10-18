@@ -28,7 +28,7 @@ impl FailClosed {
             || tick.verdict.is_none()
             || tick.heartbeat_age_ms.unwrap_or(f64::MAX) > 1_000.0;
         if tick.late {
-            self.log.push("late verdict discarded".into());
+            self.note("late verdict discarded");
         }
         let command = if forced {
             decide(Verdict::Revert, None, tick.reported, tick.recovery)
@@ -42,11 +42,23 @@ impl FailClosed {
         };
         if matches!(command, SwitchCommand::Mode { .. }) && !tick.write_ok {
             self.write_fault = true;
-            self.log.push("mode write failed".into());
+            self.note("mode write failed");
         }
         command
     }
+
+    /// The note log keeps the last `NOTE_CAPACITY` lines. A late verdict every tick does not
+    /// grow it without bound.
+    fn note(&mut self, line: &str) {
+        if self.log.len() >= NOTE_CAPACITY {
+            self.log.remove(0);
+        }
+        self.log.push(line.into());
+    }
 }
+
+/// Lines kept by the fail-closed note log.
+pub const NOTE_CAPACITY: usize = 64;
 
 #[cfg(test)]
 mod tests {
