@@ -71,8 +71,8 @@ mod tests {
     #[test]
     fn every_learning_hazard_is_a_row_that_traces_to_an_m13_test() {
         let hazards = include_str!("../../../docs/hazards.md");
-        let bundle = include_str!("bundle.rs");
-        let quarantine = include_str!("quarantine.rs");
+        let bundle = include_str!("../../rta-host/src/bundle.rs");
+        let quarantine = include_str!("../../rta-host/src/quarantine.rs");
         let sources = [bundle, quarantine];
         for row in LEARNING_HAZARDS {
             assert!(hazards.contains(row.id), "{}", row.id);

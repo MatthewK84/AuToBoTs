@@ -213,9 +213,6 @@ mod tests {
             .log
             .iter()
             .any(|line| line.contains("in flight commit")));
-        let timing = include_str!("../../../docs/timing.md");
-        assert!(timing.contains("100 ms"));
-        assert!(timing.contains("assumption"));
     }
 
     #[test]

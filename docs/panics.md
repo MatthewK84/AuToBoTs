@@ -7,7 +7,7 @@ The host library and every host binary deny the panicking constructs outside tes
 | `event.rs` | `expect` on a non-finite float | `None`, which the evaluator treats as an interpreter fault: Revert, latched |
 | `read.rs` | slice and `unwrap` on the position blob | `get` and `ReadError::Unknown` |
 | `fence.rs` | indexed polygon edges | an edge iterator; fewer than three vertices is still never inside |
-| `learning_hazards.rs` | `expect` on a missing row | Revert, the fail-closed outcome; a test still requires every row |
+| `learning_hazards.rs` (now `crates/rta-docs`, not flight code) | `expect` on a missing row | Revert, the fail-closed outcome; a test still requires every row |
 | `command_out.rs` | sliced status-text copy | a bounded `zip` |
 | `sitl.rs` | indexed percentiles | `get`, `first`, and `last` |
 | `bin/rta-target.rs` | `expect` on config, spec, and hover record; indexed `/proc` fields | exit 1 with a message; a missing field reads as zero |

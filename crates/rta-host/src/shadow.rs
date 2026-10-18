@@ -114,20 +114,6 @@ mod tests {
     }
 
     #[test]
-    fn neither_network_constructs_a_command() {
-        let source = include_str!("shadow.rs");
-        let command = ["Switch", "Command"].concat();
-        let decide = ["fn ", "decide"].concat();
-        let outbound = ["Command", "::"].concat();
-        assert!(!source.contains(&command));
-        assert!(!source.contains(&decide));
-        assert!(!source.contains(&outbound));
-        let primary = Fixed(Some(point(1.0)));
-        let shadow = Fixed(Some(point(2.0)));
-        let _ = (primary.0, shadow.0);
-    }
-
-    #[test]
     fn revert_drops_both_proposals() {
         let mut selector = ShadowSelector::new(1);
         let mut primary = Fixed(Some(point(1.0)));

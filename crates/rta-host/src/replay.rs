@@ -181,10 +181,6 @@ mod tests {
         let log = include_str!("../fixtures/wrong-version.log");
         let err = super::header_version(log).unwrap_err();
         assert_eq!(err.expected, "version");
-        let format = include_str!("../../../docs/log-format.md");
-        assert!(format.contains("Current version is `1`"));
-        let main = include_str!("bin/rta-replay.rs");
-        assert!(main.contains("ExitCode::from(1)"));
     }
 
     use super::*;

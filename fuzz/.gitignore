@@ -1,0 +1,10 @@
+target/
+artifacts/
+coverage/
+# libFuzzer grows the corpus as it runs; only the seeds are checked in.
+corpus/*/*
+!corpus/*/example.toml
+!corpus/*/sitl.toml
+!corpus/read_apply/position
+!corpus/read_apply/status
+!corpus/mavlink_frames/*.bin

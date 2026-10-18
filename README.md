@@ -143,6 +143,7 @@ flowchart TD
 - `rta-switch` is a pure function. No interpreter and no MAVLink.
 - `rta-host` is the binary. Config, clock, interpreter, link, and log.
 - `rta-replay` re-evaluates a tick log against the spec.
+- `rta-docs` holds the document and source-text checks. Not flight code; no binary links it (`docs/doc-checks.md`).
 
 ## Build
 
