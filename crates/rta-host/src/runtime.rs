@@ -12,6 +12,7 @@ use crate::config::{self, Config};
 use crate::eval_worker::{EvalWorker, Outcome};
 use crate::fail_closed::{FailClosed, TickCase};
 use crate::fence::{fence_ok, FenceInput};
+use crate::gate::{self, Gate, Inputs};
 use crate::link::{LinkError, UdpLink};
 use crate::link_age::{LinkAge, LinkMessage};
 use crate::mavlink_link::{
@@ -21,7 +22,7 @@ use crate::recovery::{AckResult, Latch, Policy, State, Step};
 use crate::stale::present_track;
 use crate::tick_log::{command_name, TickLog, TickRecord};
 use crate::watchdog::Watchdog;
-use mavlink::dialects::common::{MavAutopilot, MavMessage};
+use mavlink::dialects::common::{MavAutopilot, MavMessage, MavModeFlag};
 use mavlink::MavHeader;
 use rta_spec::{InputRecord, RecoveryMode, Verdict};
 use rta_switch::{Complex, SwitchCommand};
@@ -62,6 +63,8 @@ pub struct Vehicle {
     pub fc_heartbeat_ms: Option<u64>,
     pub fc_custom_mode: Option<u32>,
     pub fc_system: Option<u8>,
+    /// `MAV_MODE_FLAG_SAFETY_ARMED` in the last flight-controller `HEARTBEAT`.
+    pub fc_armed: bool,
     pub fix_ms: Option<u64>,
     pub north_m: f64,
     pub east_m: f64,
@@ -81,6 +84,9 @@ pub fn apply_message(vehicle: &mut Vehicle, header: &MavHeader, message: &MavMes
             vehicle.fc_heartbeat_ms = Some(now_ms);
             vehicle.fc_custom_mode = Some(beat.custom_mode);
             vehicle.fc_system = Some(header.system_id);
+            vehicle.fc_armed = beat
+                .base_mode
+                .contains(MavModeFlag::MAV_MODE_FLAG_SAFETY_ARMED);
             vehicle.link.observe(LinkMessage::Command, now_ms);
         }
         MavMessage::LOCAL_POSITION_NED(position) => {
@@ -149,6 +155,22 @@ pub fn present(config: &Config, vehicle: &Vehicle, now_ms: u64) -> Result<Presen
         age_ms(vehicle.fc_heartbeat_ms, now_ms),
     )?;
     Ok(Presented { record, fence_ok })
+}
+
+pub fn gate_mode_of(config: &Config) -> gate::Mode {
+    match config.startup.mode {
+        config::StartupMode::Armed => gate::Mode::Armed,
+        config::StartupMode::Immediate => gate::Mode::Immediate,
+    }
+}
+
+/// Ready: the flight controller has been heard and the fix is no older than
+/// `startup.ready_fix_age_ms`.
+pub fn ready(config: &Config, vehicle: &Vehicle, now_ms: u64) -> bool {
+    vehicle.fc_heartbeat_ms.is_some()
+        && vehicle
+            .fix_ms
+            .is_some_and(|at| now_ms.saturating_sub(at) <= config.startup.ready_fix_age_ms)
 }
 
 pub fn policy_of(config: &Config) -> Policy {
@@ -228,6 +250,8 @@ struct Shared {
     /// both drive it under this lock, so one attempt is never sent twice.
     recovery: Mutex<Latch>,
     watchdog_fired: AtomicBool,
+    /// The startup gate let the last tick act. The watchdog acts only when it did.
+    gate_open: AtomicBool,
 }
 
 impl Shared {
@@ -308,6 +332,7 @@ pub fn run<W: Write>(
         published_ms: AtomicU64::new(0),
         recovery: Mutex::new(Latch::new(recovery, policy_of(config))),
         watchdog_fired: AtomicBool::new(false),
+        gate_open: AtomicBool::new(false),
     });
 
     let receiver = spawn_receiver(link.try_clone().map_err(RunError::Link)?, &shared, clock)?;
@@ -327,6 +352,7 @@ pub fn run<W: Write>(
     };
 
     let mut sender = Sender::new(link, config);
+    let mut gate = Gate::new(gate_mode_of(config), config.startup.ready_timeout_ms);
     let mut closed = FailClosed::default();
     let mut report = RunReport::default();
     let mut log_failed = false;
@@ -372,9 +398,22 @@ pub fn run<W: Write>(
         if late {
             reasons.push("late".to_string());
         }
-        // Recovery in progress, a failed log write, or an evaluation fault latches Revert
-        // until restart.
-        let latched = shared.recovery_engaged() || log_failed || worker.faulted();
+        // The startup gate: monitor only while disarmed or not ready (`gate.rs`).
+        let heard = vehicle.fc_heartbeat_ms.is_some();
+        let gated = gate.step(
+            now_ms,
+            Inputs {
+                heard,
+                armed: vehicle.fc_armed,
+                ready: ready(config, &vehicle, now_ms),
+            },
+            &mut reasons,
+        );
+        shared.gate_open.store(gated.act, Ordering::SeqCst);
+        // Recovery in progress, a failed log write, an evaluation fault, or an arm before
+        // readiness latches Revert until restart.
+        let latched =
+            shared.recovery_engaged() || log_failed || worker.faulted() || gated.force_revert;
         if latched {
             reasons.push("latched".to_string());
         }
@@ -399,9 +438,11 @@ pub fn run<W: Write>(
         };
 
         let target = vehicle.fc_system.unwrap_or(config.link.system_id);
-        if vehicle.fc_heartbeat_ms.is_none() {
+        if !heard {
             // Nothing is commanded to a flight controller that has not been heard.
             reasons.push("no_fc".to_string());
+        } else if !gated.act {
+            // Monitor only. The gate has logged `disarmed` or `not_ready`.
         } else {
             match command {
                 SwitchCommand::Mode { .. } => shared.engage_recovery(now_ms),
@@ -464,7 +505,9 @@ pub fn run<W: Write>(
     shared.stop.store(true, Ordering::SeqCst);
     let vehicle = shared.snapshot();
     let reported = vehicle.fc_custom_mode.and_then(reported_mode);
-    if vehicle.fc_heartbeat_ms.is_some() && reported != Some(recovery) {
+    let may_act = shared.gate_open.load(Ordering::SeqCst)
+        && (gate_mode_of(config) == gate::Mode::Immediate || vehicle.fc_armed);
+    if vehicle.fc_heartbeat_ms.is_some() && may_act && reported != Some(recovery) {
         let target = vehicle.fc_system.unwrap_or(config.link.system_id);
         let now_ms = clock.now_ms();
         shared.engage_recovery(now_ms);
@@ -544,6 +587,7 @@ fn spawn_watchdog(
     let mut dog = Watchdog::new(config.tick.period_ms, config.tick.watchdog_misses);
     let poll = Duration::from_millis((config.tick.period_ms / 2).max(1));
     let fallback_target = config.link.system_id;
+    let armed_gate = gate_mode_of(config) == gate::Mode::Armed;
     thread::Builder::new()
         .name("rta-watchdog".into())
         .spawn(move || {
@@ -553,6 +597,11 @@ fn spawn_watchdog(
                 dog.publish(shared.published_ms.load(Ordering::SeqCst));
                 let vehicle = shared.snapshot();
                 if vehicle.fc_heartbeat_ms.is_none() || !dog.stalled(now_ms) {
+                    continue;
+                }
+                // The same startup gate as the tick thread: the last tick's verdict, and the
+                // arm state now, since the tick thread is not there to see a disarm.
+                if !shared.gate_open.load(Ordering::SeqCst) || (armed_gate && !vehicle.fc_armed) {
                     continue;
                 }
                 // The tick thread is stalled. Engage the same latch and send what is due.
@@ -627,6 +676,11 @@ polygon = [[0.0, 0.0], [200.0, 0.0], [200.0, 200.0], [0.0, 200.0]]
 vertical_cap_m = 120.0
 v_max = 15.0
 a_max = 3.0
+
+[startup]
+mode = "armed"
+ready_timeout_ms = 30000
+ready_fix_age_ms = 200
 "#
         ))
         .unwrap()
@@ -686,6 +740,10 @@ a_max = 3.0
         socket: UdpSocket,
         px4: Px4,
         position: Arc<Mutex<(f32, f32, f32)>>,
+        /// Reported in `HEARTBEAT.base_mode`. A change is heartbeated at once.
+        armed: Arc<AtomicBool>,
+        /// Off: no `LOCAL_POSITION_NED` at all, so the host has no fix.
+        streaming: Arc<AtomicBool>,
         seen: Arc<Mutex<Seen>>,
         stop: Arc<AtomicBool>,
     }
@@ -700,6 +758,8 @@ a_max = 3.0
                 socket,
                 px4: Px4::Obey,
                 position: Arc::new(Mutex::new((100.0, 100.0, -30.0))),
+                armed: Arc::new(AtomicBool::new(true)),
+                streaming: Arc::new(AtomicBool::new(true)),
                 seen: Arc::new(Mutex::new(Seen::default())),
                 stop: Arc::new(AtomicBool::new(false)),
             }
@@ -715,7 +775,17 @@ a_max = 3.0
             let seen = Arc::clone(&self.seen);
             let stop = Arc::clone(&self.stop);
             let px4 = self.px4;
+            let armed = Arc::clone(&self.armed);
+            let streaming = Arc::clone(&self.streaming);
             thread::spawn(move || {
+                let mut was_armed = armed.load(Ordering::SeqCst);
+                let base_mode = |armed: bool| {
+                    let mut flags = MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED;
+                    if armed {
+                        flags |= MavModeFlag::MAV_MODE_FLAG_SAFETY_ARMED;
+                    }
+                    flags
+                };
                 let mut mode = PX4_POSCTL;
                 let mut lost = 0_usize;
                 let mut sequence = 0_u8;
@@ -737,25 +807,32 @@ a_max = 3.0
                     // heartbeat, and a heartbeat with no fix yet is a real Revert. Sending the
                     // fix first keeps the start of every test nominal.
                     let (x, y, z) = *lock(&position);
-                    send(
-                        &MavMessage::LOCAL_POSITION_NED(LOCAL_POSITION_NED_DATA {
-                            time_boot_ms: 0,
-                            x,
-                            y,
-                            z,
-                            vx: 0.0,
-                            vy: 0.0,
-                            vz: 0.0,
-                        }),
-                        &mut sequence,
-                    );
+                    if streaming.load(Ordering::SeqCst) {
+                        send(
+                            &MavMessage::LOCAL_POSITION_NED(LOCAL_POSITION_NED_DATA {
+                                time_boot_ms: 0,
+                                x,
+                                y,
+                                z,
+                                vx: 0.0,
+                                vy: 0.0,
+                                vz: 0.0,
+                            }),
+                            &mut sequence,
+                        );
+                    }
+                    let now_armed = armed.load(Ordering::SeqCst);
+                    if now_armed != was_armed {
+                        was_armed = now_armed;
+                        last_beat = None;
+                    }
                     if last_beat.is_none_or(|at| at.elapsed() >= Duration::from_millis(100)) {
                         send(
                             &MavMessage::HEARTBEAT(HEARTBEAT_DATA {
                                 custom_mode: mode,
                                 mavtype: MavType::MAV_TYPE_QUADROTOR,
                                 autopilot: MavAutopilot::MAV_AUTOPILOT_PX4,
-                                base_mode: MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+                                base_mode: base_mode(now_armed),
                                 system_status: MavState::MAV_STATE_ACTIVE,
                                 mavlink_version: 3,
                             }),
@@ -847,7 +924,7 @@ a_max = 3.0
                                 custom_mode: mode,
                                 mavtype: MavType::MAV_TYPE_QUADROTOR,
                                 autopilot: MavAutopilot::MAV_AUTOPILOT_PX4,
-                                base_mode: MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+                                base_mode: base_mode(now_armed),
                                 system_status: MavState::MAV_STATE_ACTIVE,
                                 mavlink_version: 3,
                             }),
@@ -1193,10 +1270,21 @@ a_max = 3.0
         let mut fc = FakeFc::bind();
         fc.px4 = px4;
         *lock(&fc.position) = OUTSIDE;
+        run_fc(name, &fc, tune, ticks, complex)
+    }
+
+    /// Run the loop against a prepared fake. Returns what the fake saw and the log.
+    fn run_fc(
+        name: &str,
+        fc: &FakeFc,
+        tune: impl FnOnce(&mut Config),
+        ticks: u64,
+        complex: &mut dyn Complex,
+    ) -> (RunReport, Seen, String) {
         let path = log_path(name);
         let mut config = config(fc.port(), path.to_str().unwrap());
         tune(&mut config);
-        let link = host_link(&fc);
+        let link = host_link(fc);
         let fc_thread = fc.spawn(loopback(&link));
         let mut log = TickLog::open(&path, 1, 0).unwrap();
         let report = run(
@@ -1415,6 +1503,234 @@ a_max = 3.0
         );
     }
 
+    /// A complex function that asks for nothing and runs scripted actions on given ticks, on
+    /// the tick thread. Actions keyed to ticks, not to wall time.
+    struct Script {
+        tick: u64,
+        steps: Vec<(u64, Box<dyn FnMut()>)>,
+    }
+
+    impl Script {
+        fn new() -> Self {
+            Self {
+                tick: 0,
+                steps: Vec::new(),
+            }
+        }
+
+        fn at(mut self, tick: u64, action: impl FnMut() + 'static) -> Self {
+            self.steps.push((tick, Box::new(action)));
+            self
+        }
+    }
+
+    impl Complex for Script {
+        fn request(&mut self) -> Option<Request> {
+            self.tick += 1;
+            for (at, action) in &mut self.steps {
+                if *at == self.tick {
+                    action();
+                }
+            }
+            None
+        }
+    }
+
+    fn set(flag: &Arc<AtomicBool>, value: bool) -> impl FnMut() + 'static {
+        let flag = Arc::clone(flag);
+        move || flag.store(value, Ordering::SeqCst)
+    }
+
+    fn immediate(config: &mut Config) {
+        config.startup.mode = config::StartupMode::Immediate;
+    }
+
+    /// Lines after the flight controller was first heard.
+    fn heard_lines(text: &str) -> Vec<&str> {
+        tick_lines(text)
+            .into_iter()
+            .filter(|line| !line.contains("no_fc"))
+            .collect()
+    }
+
+    #[test]
+    fn a_disarmed_vehicle_is_never_commanded_even_outside_the_fence() {
+        let fc = FakeFc::bind();
+        fc.armed.store(false, Ordering::SeqCst);
+        *lock(&fc.position) = OUTSIDE;
+        let (report, seen, text) = run_fc("disarmed", &fc, |_| {}, 15, &mut StubComplex);
+        assert!(seen.recovery().is_empty(), "{text}");
+        assert_eq!(seen.setpoints, 0);
+        assert!(!report.recovery_sent, "{report:?}");
+        let lines = heard_lines(&text);
+        assert!(!lines.is_empty(), "{text}");
+        for line in lines {
+            // Monitored and logged: the fence Revert is there, and nothing went out.
+            for item in ["disarmed", "verdict=revert", "fence_ok=0"] {
+                assert!(line.contains(item), "{item}: {line}");
+            }
+            assert!(
+                !line.contains("sent:") && !line.contains("recovery_"),
+                "{line}"
+            );
+        }
+    }
+
+    #[test]
+    fn arm_after_ready_then_a_breach_sends_one_auto_rtl_and_disarm_is_monitor_only() {
+        let fc = FakeFc::bind();
+        fc.armed.store(false, Ordering::SeqCst);
+        let armed_at = Arc::new(Mutex::new(None));
+        let mut script = Script::new()
+            .at(4, {
+                let armed = set(&fc.armed, true);
+                let armed_at = Arc::clone(&armed_at);
+                let mut armed = armed;
+                move || {
+                    *lock(&armed_at) = Some(Instant::now());
+                    armed();
+                }
+            })
+            .at(8, {
+                let position = Arc::clone(&fc.position);
+                move || *lock(&position) = OUTSIDE
+            })
+            .at(16, set(&fc.armed, false));
+        let (report, seen, text) = run_fc("arm", &fc, |_| {}, 20, &mut script);
+        assert_eq!(seen.set_mode.len(), 1, "{text}");
+        assert!(seen.nav.is_empty());
+        let (p1, p2, p3, at) = seen.set_mode[0];
+        assert_eq!((p1, p2, p3), (1.0, 4.0, 5.0));
+        assert!(
+            at > lock(&armed_at).unwrap(),
+            "commanded before the arm\n{text}"
+        );
+        assert!(report.recovery_confirmed, "{report:?}");
+        let lines = heard_lines(&text);
+        assert!(lines[0].contains("disarmed"), "{text}");
+        assert!(!text.contains("not_ready_at_arm"), "{text}");
+        let sent = lines
+            .iter()
+            .find(|line| line.contains("sent:set_mode"))
+            .unwrap_or_else(|| panic!("{text}"));
+        assert!(
+            !sent.contains("disarmed") && sent.contains("verdict=revert"),
+            "{sent}"
+        );
+        assert!(lines.last().unwrap().contains("disarmed"), "{text}");
+    }
+
+    #[test]
+    fn arm_before_ready_reverts_at_once_and_latches_the_fault() {
+        let fc = FakeFc::bind();
+        fc.streaming.store(false, Ordering::SeqCst);
+        let mut script = Script::new().at(6, set(&fc.streaming, true));
+        let (report, seen, text) = run_fc("early-arm", &fc, |_| {}, 12, &mut script);
+        assert_eq!(seen.set_mode.len(), 1, "{text}");
+        assert!(report.recovery_sent);
+        let lines = heard_lines(&text);
+        for item in [
+            "not_ready_at_arm",
+            "verdict=revert",
+            "command=mode",
+            "sent:set_mode",
+        ] {
+            assert!(lines[0].contains(item), "{item}: {}\n{text}", lines[0]);
+        }
+        // The fix arriving later does not clear it.
+        for line in &lines[1..] {
+            assert!(line.contains("not_ready_at_arm"), "{line}");
+            assert!(
+                line.contains("latched") && line.contains("verdict=revert"),
+                "{line}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_heartbeat_before_any_position_no_longer_sends_rtl_at_boot() {
+        let fc = FakeFc::bind();
+        fc.streaming.store(false, Ordering::SeqCst);
+        let last_tick = Arc::new(Mutex::new(None));
+        let mut script = Script::new().at(5, set(&fc.streaming, true)).at(12, {
+            let last_tick = Arc::clone(&last_tick);
+            move || *lock(&last_tick) = Some(Instant::now())
+        });
+        let (_, seen, text) = run_fc("boot", &fc, immediate, 12, &mut script);
+        // The shutdown order still sends the recovery mode after the last tick. Nothing is
+        // sent before it.
+        let last_tick = lock(&last_tick).unwrap();
+        assert!(
+            seen.recovery().iter().all(|(_, at)| *at > last_tick),
+            "{text}"
+        );
+        assert!(!text.contains("sent:"), "{text}");
+        let lines = heard_lines(&text);
+        assert!(lines[0].contains("not_ready"), "{text}");
+        let first_ready = lines
+            .iter()
+            .position(|line| !line.contains("not_ready"))
+            .unwrap_or_else(|| panic!("never ready\n{text}"));
+        for line in &lines[first_ready..] {
+            // Nominal: inside the fence, no tracker, so inhibit.
+            assert!(line.contains("verdict=inhibit"), "{line}\n{text}");
+            assert!(!line.contains("latched"), "{line}");
+        }
+    }
+
+    #[test]
+    fn immediate_mode_commands_a_disarmed_vehicle_once_ready() {
+        let fc = FakeFc::bind();
+        fc.armed.store(false, Ordering::SeqCst);
+        *lock(&fc.position) = OUTSIDE;
+        let (report, seen, text) = run_fc("immediate", &fc, immediate, 12, &mut StubComplex);
+        assert_eq!(seen.set_mode.len(), 1, "{text}");
+        assert!(report.recovery_confirmed);
+        assert!(!text.contains("disarmed"), "{text}");
+        assert!(heard_lines(&text)[0].contains("sent:set_mode"), "{text}");
+    }
+
+    #[test]
+    fn the_watchdog_is_gated_while_disarmed() {
+        let fc = FakeFc::bind();
+        fc.armed.store(false, Ordering::SeqCst);
+        *lock(&fc.position) = OUTSIDE;
+        let window = Arc::new(Mutex::new(None));
+        let mut stall = Stall {
+            tick: 0,
+            at: 4,
+            hold: Duration::from_millis(1_200),
+            window: Arc::clone(&window),
+        };
+        let (report, seen, text) = run_fc("dog-gated", &fc, |_| {}, 8, &mut stall);
+        assert!(lock(&window).is_some());
+        assert!(!report.watchdog_fired, "{report:?}\n{text}");
+        assert!(seen.recovery().is_empty(), "{text}");
+        assert!(!report.recovery_sent);
+    }
+
+    #[test]
+    fn the_ready_timeout_is_logged_and_nothing_is_commanded_while_disarmed() {
+        let fc = FakeFc::bind();
+        fc.armed.store(false, Ordering::SeqCst);
+        fc.streaming.store(false, Ordering::SeqCst);
+        let (report, seen, text) = run_fc(
+            "timeout",
+            &fc,
+            |config| config.startup.ready_timeout_ms = 300,
+            10,
+            &mut StubComplex,
+        );
+        assert!(seen.recovery().is_empty(), "{text}");
+        assert!(!report.recovery_sent);
+        let lines = tick_lines(&text);
+        assert!(lines.last().unwrap().contains("ready_timeout"), "{text}");
+        assert!(
+            heard_lines(&text).iter().all(|l| l.contains("disarmed")),
+            "{text}"
+        );
+    }
+
     #[test]
     fn nothing_is_commanded_before_the_flight_controller_is_heard() {
         let silent = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -1528,6 +1844,8 @@ mod doc_tests {
             "The deadline is preemptive.",
             "Recovery is resent until the flight controller reports it.",
             "never double-send",
+            "the startup gate in `docs/startup.md`",
+            "`not_ready_at_arm`",
             "udpin:host:port",
             "No PX4 SITL run of this loop is recorded.",
         ] {

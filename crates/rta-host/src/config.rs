@@ -15,6 +15,8 @@ pub struct Config {
     pub fence: Fence,
     #[serde(default)]
     pub shadow: Shadow,
+    #[serde(default)]
+    pub startup: Startup,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -120,6 +122,36 @@ impl Default for Shadow {
     }
 }
 
+/// When the runtime may command the flight controller (`docs/startup.md`).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Startup {
+    pub mode: StartupMode,
+    /// A readiness fault is logged when the runtime is not ready this long after start.
+    pub ready_timeout_ms: u64,
+    /// A position fix no older than this counts toward readiness.
+    pub ready_fix_age_ms: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StartupMode {
+    /// Monitor only while the flight controller is disarmed. The production default.
+    Armed,
+    /// Ignore the arm state. Bench and SITL.
+    Immediate,
+}
+
+impl Default for Startup {
+    fn default() -> Self {
+        Self {
+            mode: StartupMode::Armed,
+            ready_timeout_ms: 30_000,
+            ready_fix_age_ms: 200,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ConfigError(pub String);
 
@@ -172,6 +204,16 @@ fn validate(config: &Config) -> Result<(), ConfigError> {
             "recovery.attempts_per_step must be from 1 to 10".into(),
         ));
     }
+    if config.startup.ready_fix_age_ms < config.tick.period_ms {
+        return Err(ConfigError(
+            "startup.ready_fix_age_ms must be at least tick.period_ms".into(),
+        ));
+    }
+    if config.startup.ready_timeout_ms < 1 {
+        return Err(ConfigError(
+            "startup.ready_timeout_ms must be at least 1".into(),
+        ));
+    }
     if config.log.flush_every_n < 1 {
         return Err(ConfigError("log.flush_every_n must be at least 1".into()));
     }
@@ -214,6 +256,31 @@ mod tests {
         assert!(matches!(config.fence, Fence::Host { .. }));
         assert!(!config.shadow.enabled);
         assert_eq!(config.shadow.inference_budget_ms, 2);
+        // Production arms the gate explicitly.
+        assert!(example().contains("[startup]\nmode = \"armed\""));
+        assert_eq!(config.startup, Startup::default());
+    }
+
+    #[test]
+    fn startup_defaults_to_armed_and_is_checked() {
+        let sitl = parse_str(include_str!("../../../config/sitl.toml")).unwrap();
+        assert_eq!(sitl.startup.mode, StartupMode::Immediate);
+        let without = example()
+            .split("[startup]")
+            .next()
+            .unwrap_or_default()
+            .to_string();
+        assert_eq!(
+            parse_str(&without).unwrap().startup.mode,
+            StartupMode::Armed
+        );
+        for (from, to) in [
+            ("ready_fix_age_ms = 200", "ready_fix_age_ms = 10"),
+            ("ready_timeout_ms = 30000", "ready_timeout_ms = 0"),
+            ("mode = \"armed\"", "mode = \"always\""),
+        ] {
+            assert!(parse_str(&example().replace(from, to)).is_err(), "{to}");
+        }
     }
 
     #[test]

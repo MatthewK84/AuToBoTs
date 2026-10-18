@@ -22,7 +22,7 @@ mod tests {
         let index = include_str!("../../../docs/do178/sci.md");
         let bundle = include_str!("../../../docs/reload-bundle.md");
         assert!(index.contains("ae398e85f30cd1e8723bbef36ad934b3651017e6d987eeedbc7fddf229bd6553"));
-        assert!(index.contains("518d4494221123a1cc9e8069fcc7c618ec090759e719cde79478938f68406622"));
+        assert!(index.contains("747ff29188a50757aed426688ee7229695d09a62bdd8a947845bc67c3d2781db"));
         assert!(index.contains("8ef36e2c13b88ae726738d52da06723be20e7ad52127db46f0b8b069dfb052ac"));
         assert!(index.contains("not floating branch tips"));
         assert!(!index.contains("branch: main"));

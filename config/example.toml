@@ -34,3 +34,8 @@ inference_budget_ms = 2
 weights_path = ""
 weights_hash = ""
 silence_ticks = 3
+
+[startup]
+mode = "armed"
+ready_timeout_ms = 30000
+ready_fix_age_ms = 200

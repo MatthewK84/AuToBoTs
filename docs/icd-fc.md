@@ -19,7 +19,7 @@ This is the contract for the one link the adapter owns. There is no second socke
 
 | Message | Id | Effect |
 | --- | --- | --- |
-| `HEARTBEAT` | 0 | Resets `fc_heartbeat_age_ms` from local receive time. |
+| `HEARTBEAT` | 0 | Resets `fc_heartbeat_age_ms` from local receive time. `custom_mode` is the reported mode. `base_mode` `MAV_MODE_FLAG_SAFETY_ARMED` (128) is the arm state for the startup gate in `docs/startup.md`. |
 | `GLOBAL_POSITION_INT` | 33 | Updates `alt_m` in meters from millimeters. Resets `fix_age_ms`. The sender timestamp is not an age. Not read by the runtime loop. |
 | `LOCAL_POSITION_NED` | 32 | Runtime loop fix: north `x` and east `y` in meters for the host fence, altitude `-z`. Resets `fix_age_ms` when all three are finite. |
 | `STATUSTEXT` | 253 | Logged. Does not change the record or the verdict. |
