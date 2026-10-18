@@ -6,6 +6,7 @@ pub mod command_out;
 pub mod common_mode;
 pub mod config;
 pub mod coverage_gate;
+pub mod degraded;
 pub mod eval;
 pub mod event;
 pub mod fail_closed;
