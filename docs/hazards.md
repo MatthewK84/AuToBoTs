@@ -11,7 +11,7 @@ A hazard enters this file before it enters the spec or a test. No new hazard wit
 | H3 | Stale command link | Spec stream on `link_age_ms` | Revert |
 | H4 | Stale flight-controller heartbeat | Spec stream on `fc_heartbeat_age_ms` | Revert |
 | H5 | Weak track inside commit range | Spec stream on `range_m` and `track_conf` | Inhibit, unless a revert row is also true |
-| H6 | NaN or infinity in any numeric input | Host record constructor rejects the sample | Revert |
+| H6 | NaN or infinity in any numeric input | Host record constructor rejects the sample. `TickInput::try_new` rejects a non-finite or negative energy value, and `decide_input` reverts on one | Revert |
 | H7 | Monitor eval longer than `deadline_ms` | Host timer, not the interpreter | Revert, and the late interpreter result is discarded |
 | H8 | Interpreter load or `accept_event` error | Host latch on any `Err` | Revert, latched until process restart |
 | H9 | Setpoints and a mode change in the same tick | Switch type: `Command` is an enum, not two independent flags | Unreachable |

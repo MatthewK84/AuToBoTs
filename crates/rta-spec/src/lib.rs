@@ -28,7 +28,11 @@ pub enum Phase {
     Abort,
 }
 
+/// Switch input for one tick. Build it with [`TickInput::try_new`]; deserializing
+/// goes through the same check. The fields stay public, so `decide_input` in
+/// `rta-switch` also fails closed on a non-finite or negative energy value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "RawTickInput")]
 pub struct TickInput {
     pub phase: Phase,
     pub grant_present: bool,
@@ -38,6 +42,68 @@ pub struct TickInput {
     pub estimator_ok: bool,
     pub endurance_s: f64,
     pub time_to_rally_s: f64,
+}
+
+impl TickInput {
+    /// Rejects a NaN, infinite, or negative `endurance_s` or `time_to_rally_s`.
+    #[allow(clippy::too_many_arguments)] // one argument per field, as in the struct
+    pub fn try_new(
+        phase: Phase,
+        grant_present: bool,
+        coast_ok: bool,
+        pilot_override: bool,
+        abort_requested: bool,
+        estimator_ok: bool,
+        endurance_s: f64,
+        time_to_rally_s: f64,
+    ) -> Result<Self, &'static str> {
+        if !endurance_s.is_finite() || !time_to_rally_s.is_finite() {
+            return Err("endurance_s and time_to_rally_s must be finite");
+        }
+        if endurance_s < 0.0 || time_to_rally_s < 0.0 {
+            return Err("endurance_s and time_to_rally_s must be non-negative");
+        }
+        Ok(Self {
+            phase,
+            grant_present,
+            coast_ok,
+            pilot_override,
+            abort_requested,
+            estimator_ok,
+            endurance_s,
+            time_to_rally_s,
+        })
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawTickInput {
+    phase: Phase,
+    grant_present: bool,
+    coast_ok: bool,
+    pilot_override: bool,
+    abort_requested: bool,
+    estimator_ok: bool,
+    endurance_s: f64,
+    time_to_rally_s: f64,
+}
+
+impl TryFrom<RawTickInput> for TickInput {
+    type Error = &'static str;
+
+    fn try_from(raw: RawTickInput) -> Result<Self, Self::Error> {
+        Self::try_new(
+            raw.phase,
+            raw.grant_present,
+            raw.coast_ok,
+            raw.pilot_override,
+            raw.abort_requested,
+            raw.estimator_ok,
+            raw.endurance_s,
+            raw.time_to_rally_s,
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -216,6 +282,55 @@ mod tests {
         assert!(InputRecord::try_new(1.0, true, 0.0, 0.5, f64::INFINITY, 0.0, 0.0).is_err());
         assert!(InputRecord::try_new(1.0, true, 0.0, 1.1, 1.0, 0.0, 0.0).is_err());
         assert!(InputRecord::try_new(1.0, true, -1.0, 0.5, 1.0, 0.0, 0.0).is_err());
+    }
+
+    #[test]
+    // trace: H6
+    fn tick_input_rejects_non_finite_and_negative_energy() {
+        let make = |endurance: f64, rally: f64| {
+            TickInput::try_new(
+                Phase::Commit,
+                true,
+                true,
+                false,
+                false,
+                true,
+                endurance,
+                rally,
+            )
+        };
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0] {
+            assert!(make(bad, 10.0).is_err(), "endurance {bad}");
+            assert!(make(100.0, bad).is_err(), "rally {bad}");
+        }
+        assert!(make(f64::NAN, f64::NAN).is_err());
+        let ok = make(100.0, 10.0).unwrap();
+        assert_eq!(ok.endurance_s, 100.0);
+        assert_eq!(ok.time_to_rally_s, 10.0);
+        assert!(make(0.0, 0.0).is_ok());
+    }
+
+    #[test]
+    fn tick_input_deserialize_goes_through_try_new() {
+        let good =
+            TickInput::try_new(Phase::Track, false, true, false, false, true, 50.0, 5.0).unwrap();
+        let text = serde_json::to_string(&good).unwrap();
+        let back: TickInput = serde_json::from_str(&text).unwrap();
+        assert_eq!(back, good);
+        let negative = text.replace("50.0", "-50.0");
+        assert_ne!(negative, text);
+        let err = serde_json::from_str::<TickInput>(&negative).unwrap_err();
+        assert!(err.to_string().contains("non-negative"), "{err}");
+        let huge = text.replace("50.0", "1e999");
+        assert!(serde_json::from_str::<TickInput>(&huge).is_err());
+        let extra = text.replace('}', ",\"spare\":1}");
+        assert!(serde_json::from_str::<TickInput>(&extra).is_err());
+        let nan = serde_json::to_string(&TickInput {
+            endurance_s: f64::NAN,
+            ..good
+        })
+        .unwrap();
+        assert!(serde_json::from_str::<TickInput>(&nan).is_err(), "{nan}");
     }
 
     #[test]

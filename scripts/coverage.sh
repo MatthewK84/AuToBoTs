@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Measure rta-switch. An uncovered Revert arm in decide fails.
+# Measure rta-switch. An uncovered Revert arm in decide or decide_input fails.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
@@ -22,3 +22,12 @@ if [ "$revert" -lt 2 ] || [ "$zero" -ne 0 ]; then
   exit 1
 fi
 echo "decide Revert arms covered"
+llvm-cov show --instr-profile=target/switch.profdata --name-regex='12decide_input$' "$bin" > target/coverage/decide_input.txt
+revert=$(grep -c 'Verdict::Revert' target/coverage/decide_input.txt || true)
+zero=$(grep 'Verdict::Revert' target/coverage/decide_input.txt | grep -c '| *0|' || true)
+if [ "$revert" -lt 3 ] || [ "$zero" -ne 0 ]; then
+  echo "uncovered Revert arm in decide_input" >&2
+  cat target/coverage/decide_input.txt >&2
+  exit 1
+fi
+echo "decide_input Revert arms covered"
