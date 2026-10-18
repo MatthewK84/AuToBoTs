@@ -9,7 +9,7 @@ This is the contract for the one link the adapter owns. There is no second socke
 | Message | Id | Rate | Units | When |
 | --- | --- | --- | --- | --- |
 | `HEARTBEAT` | 0 | 1 Hz | none | Always. Component type is onboard controller, not a flight controller. |
-| `COMMAND_LONG` with `MAV_CMD_DO_SET_MODE` | 76 | on mode change | custom mode is a PX4 main mode | `SwitchCommand::Mode`. Idle sends nothing. |
+| `COMMAND_LONG` with `MAV_CMD_DO_SET_MODE` | 76 | on mode change | param1 custom-mode flag, param2 PX4 main mode, param3 PX4 sub-mode | `SwitchCommand::Mode`. Idle sends nothing. |
 | `SET_POSITION_TARGET_LOCAL_NED` | 84 | tick rate | north, east, down in meters | `SwitchCommand::Setpoints`. |
 | `STATUSTEXT` | 253 | on indication change | text, 50 chars | The indication. It does not change the record. |
 
@@ -26,15 +26,23 @@ An unknown inbound message is dropped. It does not change an age.
 
 ## Mode enum
 
-PX4 custom main mode, sent in `COMMAND_LONG` param2.
+PX4 custom mode from `src/modules/commander/px4_custom_mode.h`. Every recovery mode is a sub-mode of the AUTO main mode. RTL, loiter, and land are not main modes.
 
-| Recovery | Custom mode |
-| --- | --- |
-| `Rtl` | 6 |
-| `Loiter` | 5 |
-| `Land` | 4 |
+`COMMAND_LONG` `MAV_CMD_DO_SET_MODE` carries:
 
-A reported custom mode of 6, 5, or 4 is the matching recovery. Any other value is not a recovery mode.
+- param1: `MAV_MODE_FLAG_CUSTOM_MODE_ENABLED` (1).
+- param2: PX4 main mode. Always `PX4_CUSTOM_MAIN_MODE_AUTO` (4).
+- param3: PX4 sub-mode from the table below.
+
+| Recovery | Main mode | Sub-mode | Reported `HEARTBEAT.custom_mode` |
+| --- | --- | --- | --- |
+| `Rtl` | AUTO (4) | `PX4_CUSTOM_SUB_MODE_AUTO_RTL` (5) | `0x05040000` |
+| `Loiter` | AUTO (4) | `PX4_CUSTOM_SUB_MODE_AUTO_LOITER` (3) | `0x03040000` |
+| `Land` | AUTO (4) | `PX4_CUSTOM_SUB_MODE_AUTO_LAND` (6) | `0x06040000` |
+
+PX4 packs `HEARTBEAT.custom_mode` as a union: bits 0 to 15 reserved, bits 16 to 23 `main_mode`, bits 24 to 31 `sub_mode`. The adapter decodes main = `(custom_mode >> 16) & 0xFF` and sub = `(custom_mode >> 24) & 0xFF`. Only AUTO with the RTL, loiter, or land sub-mode is the matching recovery. Any other value is not a recovery mode. That includes OFFBOARD (main 6), ACRO (main 5), and other AUTO sub-modes such as mission or takeoff.
+
+The constants are in `crates/rta-host/src/command_out.rs`. A bare main mode of 6, 5, or 4 is not a recovery mode. On PX4, main mode 6 is OFFBOARD and 5 is ACRO.
 
 ## Companion death
 
