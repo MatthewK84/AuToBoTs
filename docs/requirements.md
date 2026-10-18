@@ -21,6 +21,7 @@ Frozen shall statements. Each row has an id, a hazard id, and a verification met
 | R-H13 | H13 | The system shall refuse a swap whose shadow eval exceeds the deadline. | test |
 | R-H14 | H14 | The system shall not activate a learned weight file without a bundle. | test |
 | R-H15 | H15 | The system shall latch revert on a fault mid-swap and stay on the old spec until a spec has passed quarantine. | test |
+| R-R1 | recovery | The system shall resend the recovery command on a bounded backoff until the flight controller reports the recovery mode. It shall fall back down the order in `docs/recovery.md` on a `DENIED` or `UNSUPPORTED` ack. It shall send no attempt twice from the tick thread and the watchdog. When the order is used up unconfirmed, it shall stop sending and keep Revert latched until process restart. | test |
 | R-A1 | authority | The system shall not commit without a valid grant. A mode change is not a grant. Revert beats a valid grant. | test |
 
 ## Verification

@@ -1,4 +1,5 @@
-//! Recovery is sent once. The flag clears only on process restart.
+//! Recovery is sent once. The flag clears only on process restart. This is the bench and
+//! `rta-target` path; the integrated runtime resends through `recovery.rs`.
 
 use rta_spec::{RecoveryMode, Verdict};
 use rta_switch::{decide, Request, SwitchCommand};

@@ -1,0 +1,712 @@
+//! Recovery retry. One latch, shared by the tick thread and the watchdog.
+//!
+//! Once engaged the latch never clears before process restart. It resends the recovery
+//! command on a bounded backoff until the flight controller reports the mode in `HEARTBEAT`,
+//! reads `COMMAND_ACK` for the command it sent, and falls back down a fixed order on
+//! `DENIED` or `UNSUPPORTED`. When the order is used up without a confirmed mode it stops
+//! sending and stays latched. Detail in `docs/recovery.md`.
+//!
+//! The latch is plain state. It allocates nothing and owns no socket. The caller holds the
+//! one lock around `poll`, the send, and `sent`, so the tick thread and the watchdog cannot
+//! both send the same attempt.
+
+use mavlink::dialects::common::{MavCmd, MavMessage, MavModeFlag, COMMAND_LONG_DATA};
+use rta_spec::RecoveryMode;
+
+use crate::command_out::px4_mode;
+
+/// Resend schedule. The wait after attempt `n` is `initial_ms * 2^(n-1)`, capped at `cap_ms`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Policy {
+    pub initial_ms: u64,
+    pub cap_ms: u64,
+    pub attempts_per_step: u32,
+}
+
+impl Policy {
+    /// Wait after the `attempt`-th send, counting from one.
+    pub fn wait_after(&self, attempt: u32) -> u64 {
+        let doublings = attempt.saturating_sub(1).min(32);
+        self.initial_ms
+            .saturating_mul(1_u64 << doublings)
+            .min(self.cap_ms)
+    }
+}
+
+/// One way of asking for recovery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Step {
+    /// `MAV_CMD_DO_SET_MODE` with the PX4 AUTO sub-mode.
+    SetMode(RecoveryMode),
+    /// `MAV_CMD_NAV_RETURN_TO_LAUNCH`. PX4 answers it with AUTO_RTL.
+    ReturnToLaunch,
+    /// `MAV_CMD_NAV_LAND` at the current position. PX4 answers it with AUTO_LAND.
+    Land,
+}
+
+impl Step {
+    /// The reported mode that confirms this step.
+    pub fn expects(self) -> RecoveryMode {
+        match self {
+            Step::SetMode(mode) => mode,
+            Step::ReturnToLaunch => RecoveryMode::Rtl,
+            Step::Land => RecoveryMode::Land,
+        }
+    }
+
+    pub fn command(self) -> MavCmd {
+        match self {
+            Step::SetMode(_) => MavCmd::MAV_CMD_DO_SET_MODE,
+            Step::ReturnToLaunch => MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH,
+            Step::Land => MavCmd::MAV_CMD_NAV_LAND,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Step::SetMode(_) => "set_mode",
+            Step::ReturnToLaunch => "nav_rtl",
+            Step::Land => "nav_land",
+        }
+    }
+
+    /// The `COMMAND_LONG` for this step. `confirmation` counts resends, as MAVLink asks.
+    pub fn message(self, target_system: u8, confirmation: u8) -> MavMessage {
+        let (param1, param2, param3, rest) = match self {
+            Step::SetMode(mode) => {
+                let px4 = px4_mode(mode);
+                (
+                    f32::from(MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED.bits()),
+                    f32::from(px4.main),
+                    f32::from(px4.sub),
+                    0.0,
+                )
+            }
+            Step::ReturnToLaunch => (0.0, 0.0, 0.0, 0.0),
+            // NaN yaw, latitude, longitude, and altitude: land here, heading unchanged.
+            Step::Land => (0.0, 0.0, 0.0, f32::NAN),
+        };
+        MavMessage::COMMAND_LONG(COMMAND_LONG_DATA {
+            param1,
+            param2,
+            param3,
+            param4: rest,
+            param5: rest,
+            param6: rest,
+            param7: rest,
+            command: self.command(),
+            target_system,
+            target_component: 1,
+            confirmation,
+        })
+    }
+}
+
+const ORDER_RTL: [Step; 3] = [
+    Step::SetMode(RecoveryMode::Rtl),
+    Step::ReturnToLaunch,
+    Step::Land,
+];
+const ORDER_LOITER: [Step; 3] = [
+    Step::SetMode(RecoveryMode::Loiter),
+    Step::ReturnToLaunch,
+    Step::Land,
+];
+const ORDER_LAND: [Step; 2] = [Step::SetMode(RecoveryMode::Land), Step::Land];
+
+/// The documented fallback order for each configured recovery mode.
+pub fn fallback_order(recovery: RecoveryMode) -> &'static [Step] {
+    match recovery {
+        RecoveryMode::Rtl => &ORDER_RTL,
+        RecoveryMode::Loiter => &ORDER_LOITER,
+        RecoveryMode::Land => &ORDER_LAND,
+    }
+}
+
+/// `COMMAND_ACK.result`, read from the raw byte so a value the dialect crate lacks is kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AckResult {
+    Accepted,
+    TemporarilyRejected,
+    Denied,
+    Unsupported,
+    Failed,
+    InProgress,
+    Cancelled,
+    Other(u8),
+}
+
+impl AckResult {
+    pub fn from_raw(value: u8) -> Self {
+        match value {
+            0 => Self::Accepted,
+            1 => Self::TemporarilyRejected,
+            2 => Self::Denied,
+            3 => Self::Unsupported,
+            4 => Self::Failed,
+            5 => Self::InProgress,
+            6 => Self::Cancelled,
+            other => Self::Other(other),
+        }
+    }
+
+    /// Reason code in the tick log.
+    pub fn code(self) -> String {
+        match self {
+            Self::Accepted => "accepted".into(),
+            Self::TemporarilyRejected => "temporarily_rejected".into(),
+            Self::Denied => "denied".into(),
+            Self::Unsupported => "unsupported".into(),
+            Self::Failed => "failed".into(),
+            Self::InProgress => "in_progress".into(),
+            Self::Cancelled => "cancelled".into(),
+            Self::Other(value) => format!("result_{value}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum State {
+    /// Not engaged. Nothing has been asked for.
+    Idle,
+    /// Engaged and not yet seen in `HEARTBEAT`.
+    Pending,
+    /// The flight controller reported a mode the latch asked for.
+    Confirmed,
+    /// The fallback order is used up without a confirmed mode. Nothing more is sent.
+    Unconfirmed,
+}
+
+/// The recovery-in-progress latch.
+#[derive(Debug, Clone)]
+pub struct Latch {
+    policy: Policy,
+    order: &'static [Step],
+    step: usize,
+    engaged: bool,
+    confirmed: bool,
+    exhausted: bool,
+    attempts: u32,
+    step_attempts: u32,
+    next_due_ms: u64,
+    last_ack: Option<AckResult>,
+    fallback: Option<AckResult>,
+}
+
+impl Latch {
+    pub fn new(recovery: RecoveryMode, policy: Policy) -> Self {
+        Self {
+            policy,
+            order: fallback_order(recovery),
+            step: 0,
+            engaged: false,
+            confirmed: false,
+            exhausted: false,
+            attempts: 0,
+            step_attempts: 0,
+            next_due_ms: 0,
+            last_ack: None,
+            fallback: None,
+        }
+    }
+
+    /// Engage. The first attempt is due at once. A second call changes nothing.
+    pub fn engage(&mut self, now_ms: u64) {
+        if !self.engaged {
+            self.engaged = true;
+            self.next_due_ms = now_ms;
+        }
+    }
+
+    pub fn engaged(&self) -> bool {
+        self.engaged
+    }
+
+    pub fn attempts(&self) -> u32 {
+        self.attempts
+    }
+
+    pub fn state(&self) -> State {
+        if !self.engaged {
+            State::Idle
+        } else if self.confirmed {
+            State::Confirmed
+        } else if self.exhausted {
+            State::Unconfirmed
+        } else {
+            State::Pending
+        }
+    }
+
+    fn current(&self) -> Option<Step> {
+        self.order.get(self.step).copied()
+    }
+
+    /// The step due now, if any. The caller sends it and then calls `sent`.
+    pub fn poll(&mut self, now_ms: u64, reported: Option<RecoveryMode>) -> Option<Step> {
+        if !self.engaged || self.confirmed {
+            return None;
+        }
+        // Any mode asked for so far confirms, including one that lands after a fallback.
+        let asked = self.order.get(..=self.step).unwrap_or(self.order);
+        if reported.is_some_and(|mode| asked.iter().any(|step| step.expects() == mode)) {
+            self.confirmed = true;
+            return None;
+        }
+        if self.exhausted || now_ms < self.next_due_ms {
+            return None;
+        }
+        if self.step_attempts >= self.policy.attempts_per_step {
+            self.advance(None);
+            if self.exhausted {
+                return None;
+            }
+        }
+        self.current()
+    }
+
+    /// Record the outcome of the send `poll` asked for. A local send error does not count as
+    /// an attempt; the step stays due.
+    pub fn sent(&mut self, now_ms: u64, ok: bool) {
+        if !ok {
+            return;
+        }
+        self.attempts = self.attempts.saturating_add(1);
+        self.step_attempts = self.step_attempts.saturating_add(1);
+        self.next_due_ms = now_ms.saturating_add(self.policy.wait_after(self.attempts));
+    }
+
+    /// `confirmation` for the next `COMMAND_LONG` of this step.
+    pub fn confirmation(&self) -> u8 {
+        u8::try_from(self.step_attempts).unwrap_or(u8::MAX)
+    }
+
+    /// Apply one `COMMAND_ACK`. An ack for a command other than the one in flight is stale
+    /// and changes nothing.
+    pub fn on_ack(&mut self, now_ms: u64, command: u16, result: AckResult) {
+        if !self.engaged || self.confirmed || self.exhausted || self.step_attempts == 0 {
+            return;
+        }
+        let Some(step) = self.current() else {
+            return;
+        };
+        if step.command() as u16 != command {
+            return;
+        }
+        self.last_ack = Some(result);
+        match result {
+            // Accepted or still running: give the vehicle a full wait to report the mode.
+            AckResult::Accepted | AckResult::InProgress => {
+                let wait = self.policy.wait_after(self.attempts);
+                self.next_due_ms = self.next_due_ms.max(now_ms.saturating_add(wait));
+            }
+            // Refused for good: the next step in the order is due at once.
+            AckResult::Denied | AckResult::Unsupported => {
+                self.advance(Some(result));
+                self.next_due_ms = now_ms;
+            }
+            // Refused for now, failed, or cancelled: resend on the schedule.
+            AckResult::TemporarilyRejected
+            | AckResult::Failed
+            | AckResult::Cancelled
+            | AckResult::Other(_) => {}
+        }
+    }
+
+    fn advance(&mut self, reason: Option<AckResult>) {
+        if self.step + 1 < self.order.len() {
+            self.step += 1;
+            self.step_attempts = 0;
+            if reason.is_some() {
+                self.fallback = reason;
+            }
+        } else {
+            self.exhausted = true;
+        }
+    }
+
+    /// Reason codes for the tick log. Empty while idle.
+    pub fn reasons(&self, out: &mut Vec<String>) {
+        let state = match self.state() {
+            State::Idle => return,
+            State::Pending => "recovery_pending",
+            State::Confirmed => "recovery_confirmed",
+            State::Unconfirmed => "recovery_unconfirmed",
+        };
+        out.push(state.to_string());
+        out.push(format!("attempts:{}", self.attempts));
+        if let Some(step) = self.current() {
+            out.push(format!("step:{}", step.name()));
+        }
+        if let Some(ack) = self.last_ack {
+            out.push(format!("ack:{}", ack.code()));
+        }
+        if let Some(reason) = self.fallback {
+            out.push(format!("fallback:{}", reason.code()));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const POLICY: Policy = Policy {
+        initial_ms: 300,
+        cap_ms: 1_000,
+        attempts_per_step: 3,
+    };
+
+    /// Poll every millisecond from `from` to `to` and send whatever is due.
+    fn drive(
+        latch: &mut Latch,
+        from: u64,
+        to: u64,
+        reported: Option<RecoveryMode>,
+    ) -> Vec<(u64, Step)> {
+        let mut sends = Vec::new();
+        for now in from..=to {
+            if let Some(step) = latch.poll(now, reported) {
+                latch.sent(now, true);
+                sends.push((now, step));
+            }
+        }
+        sends
+    }
+
+    #[test]
+    fn the_wait_doubles_then_caps() {
+        let waits: Vec<u64> = (1..=6).map(|n| POLICY.wait_after(n)).collect();
+        assert_eq!(waits, [300, 600, 1_000, 1_000, 1_000, 1_000]);
+        assert_eq!(POLICY.wait_after(u32::MAX), 1_000);
+    }
+
+    #[test]
+    fn idle_sends_nothing_and_logs_nothing() {
+        let mut latch = Latch::new(RecoveryMode::Rtl, POLICY);
+        assert!(drive(&mut latch, 0, 5_000, None).is_empty());
+        let mut reasons = Vec::new();
+        latch.reasons(&mut reasons);
+        assert!(reasons.is_empty());
+    }
+
+    #[test]
+    fn a_vehicle_that_never_switches_gets_the_whole_order_on_the_schedule_then_silence() {
+        let mut latch = Latch::new(RecoveryMode::Rtl, POLICY);
+        latch.engage(0);
+        let sends = drive(&mut latch, 0, 60_000, None);
+        let times: Vec<u64> = sends.iter().map(|(at, _)| *at).collect();
+        let steps: Vec<Step> = sends.iter().map(|(_, step)| *step).collect();
+        assert_eq!(
+            times,
+            [0, 300, 900, 1_900, 2_900, 3_900, 4_900, 5_900, 6_900]
+        );
+        assert_eq!(
+            steps,
+            [
+                Step::SetMode(RecoveryMode::Rtl),
+                Step::SetMode(RecoveryMode::Rtl),
+                Step::SetMode(RecoveryMode::Rtl),
+                Step::ReturnToLaunch,
+                Step::ReturnToLaunch,
+                Step::ReturnToLaunch,
+                Step::Land,
+                Step::Land,
+                Step::Land,
+            ]
+        );
+        assert_eq!(latch.state(), State::Unconfirmed);
+        let mut reasons = Vec::new();
+        latch.reasons(&mut reasons);
+        assert!(reasons.contains(&"recovery_unconfirmed".to_string()));
+        assert!(reasons.contains(&"attempts:9".to_string()));
+    }
+
+    #[test]
+    fn a_reported_mode_confirms_and_stops_the_resends() {
+        let mut latch = Latch::new(RecoveryMode::Rtl, POLICY);
+        latch.engage(0);
+        assert_eq!(drive(&mut latch, 0, 400, None).len(), 2);
+        assert!(drive(&mut latch, 401, 60_000, Some(RecoveryMode::Rtl)).is_empty());
+        assert_eq!(latch.state(), State::Confirmed);
+        // A later report of another mode does not restart the resends.
+        assert!(drive(&mut latch, 60_001, 70_000, None).is_empty());
+    }
+
+    #[test]
+    fn a_mode_not_asked_for_does_not_confirm() {
+        let mut latch = Latch::new(RecoveryMode::Rtl, POLICY);
+        latch.engage(0);
+        assert_eq!(
+            drive(&mut latch, 0, 1_000, Some(RecoveryMode::Land)).len(),
+            3
+        );
+        assert_eq!(latch.state(), State::Pending);
+    }
+
+    #[test]
+    fn already_in_the_recovery_mode_sends_nothing() {
+        let mut latch = Latch::new(RecoveryMode::Land, POLICY);
+        latch.engage(0);
+        assert!(drive(&mut latch, 0, 10_000, Some(RecoveryMode::Land)).is_empty());
+        assert_eq!(latch.state(), State::Confirmed);
+    }
+
+    #[test]
+    fn engage_twice_does_not_reset_the_schedule() {
+        let mut latch = Latch::new(RecoveryMode::Rtl, POLICY);
+        latch.engage(0);
+        assert_eq!(drive(&mut latch, 0, 10, None).len(), 1);
+        latch.engage(11);
+        assert!(drive(&mut latch, 11, 299, None).is_empty());
+    }
+
+    #[test]
+    fn a_local_send_error_is_not_an_attempt_and_stays_due() {
+        let mut latch = Latch::new(RecoveryMode::Rtl, POLICY);
+        latch.engage(0);
+        assert!(latch.poll(0, None).is_some());
+        latch.sent(0, false);
+        assert_eq!(latch.attempts(), 0);
+        assert!(latch.poll(1, None).is_some());
+        latch.sent(1, true);
+        assert_eq!(latch.attempts(), 1);
+        assert!(latch.poll(2, None).is_none());
+    }
+
+    fn sent_once(recovery: RecoveryMode) -> Latch {
+        let mut latch = Latch::new(recovery, POLICY);
+        latch.engage(0);
+        assert!(latch.poll(0, None).is_some());
+        latch.sent(0, true);
+        latch
+    }
+
+    const SET_MODE: u16 = MavCmd::MAV_CMD_DO_SET_MODE as u16;
+
+    #[test]
+    fn denied_and_unsupported_fall_back_at_once() {
+        for result in [AckResult::Denied, AckResult::Unsupported] {
+            let mut latch = sent_once(RecoveryMode::Rtl);
+            latch.on_ack(20, SET_MODE, result);
+            assert_eq!(
+                latch.poll(20, None),
+                Some(Step::ReturnToLaunch),
+                "{result:?}"
+            );
+            latch.sent(20, true);
+            let mut reasons = Vec::new();
+            latch.reasons(&mut reasons);
+            assert!(reasons.contains(&format!("fallback:{}", result.code())));
+            assert!(reasons.contains(&"step:nav_rtl".to_string()));
+            // The fallback is confirmed by the mode it asks for.
+            assert!(latch.poll(5_000, Some(RecoveryMode::Rtl)).is_none());
+            assert_eq!(latch.state(), State::Confirmed);
+        }
+    }
+
+    #[test]
+    fn denied_on_the_last_step_stops_and_stays_latched() {
+        let mut latch = sent_once(RecoveryMode::Land);
+        latch.on_ack(10, SET_MODE, AckResult::Denied);
+        assert_eq!(latch.poll(10, None), Some(Step::Land));
+        latch.sent(10, true);
+        latch.on_ack(20, MavCmd::MAV_CMD_NAV_LAND as u16, AckResult::Denied);
+        assert_eq!(latch.state(), State::Unconfirmed);
+        assert!(latch.poll(60_000, None).is_none());
+        assert!(latch.engaged());
+    }
+
+    #[test]
+    fn accepted_and_in_progress_hold_the_resend_for_a_full_wait() {
+        for result in [AckResult::Accepted, AckResult::InProgress] {
+            let mut latch = sent_once(RecoveryMode::Rtl);
+            latch.on_ack(250, SET_MODE, result);
+            assert!(latch.poll(300, None).is_none(), "{result:?}");
+            assert!(latch.poll(549, None).is_none(), "{result:?}");
+            assert_eq!(
+                latch.poll(550, None),
+                Some(Step::SetMode(RecoveryMode::Rtl))
+            );
+        }
+    }
+
+    #[test]
+    fn temporarily_rejected_failed_and_cancelled_resend_on_the_schedule() {
+        for result in [
+            AckResult::TemporarilyRejected,
+            AckResult::Failed,
+            AckResult::Cancelled,
+            AckResult::Other(9),
+        ] {
+            let mut latch = sent_once(RecoveryMode::Rtl);
+            latch.on_ack(10, SET_MODE, result);
+            assert!(latch.poll(299, None).is_none(), "{result:?}");
+            assert_eq!(
+                latch.poll(300, None),
+                Some(Step::SetMode(RecoveryMode::Rtl))
+            );
+            let mut reasons = Vec::new();
+            latch.reasons(&mut reasons);
+            assert!(reasons.contains(&format!("ack:{}", result.code())));
+            assert!(!reasons.iter().any(|r| r.starts_with("fallback:")));
+        }
+    }
+
+    #[test]
+    fn a_stale_ack_for_another_command_changes_nothing() {
+        let mut latch = sent_once(RecoveryMode::Rtl);
+        latch.on_ack(10, MavCmd::MAV_CMD_NAV_LAND as u16, AckResult::Denied);
+        assert_eq!(
+            latch.poll(300, None),
+            Some(Step::SetMode(RecoveryMode::Rtl))
+        );
+        let mut idle = Latch::new(RecoveryMode::Rtl, POLICY);
+        idle.on_ack(10, SET_MODE, AckResult::Denied);
+        idle.engage(20);
+        assert_eq!(idle.poll(20, None), Some(Step::SetMode(RecoveryMode::Rtl)));
+    }
+
+    #[test]
+    fn the_raw_result_codes_are_distinct() {
+        let codes: Vec<String> = (0..=7).map(|v| AckResult::from_raw(v).code()).collect();
+        assert_eq!(
+            codes,
+            [
+                "accepted",
+                "temporarily_rejected",
+                "denied",
+                "unsupported",
+                "failed",
+                "in_progress",
+                "cancelled",
+                "result_7"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_fallback_order_ends_on_a_land_and_never_names_offboard() {
+        for recovery in [RecoveryMode::Rtl, RecoveryMode::Loiter, RecoveryMode::Land] {
+            let order = fallback_order(recovery);
+            assert_eq!(order[0], Step::SetMode(recovery));
+            assert_eq!(order.last(), Some(&Step::Land));
+            for step in order {
+                if let MavMessage::COMMAND_LONG(data) = step.message(1, 0) {
+                    assert_eq!(data.command, step.command());
+                    if let Step::SetMode(_) = step {
+                        assert_eq!(data.param2, 4.0);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_latch_holds_no_growing_state() {
+        let source = include_str!("recovery.rs");
+        let body = source.split("#[cfg(test)]").next().unwrap_or_default();
+        for word in [
+            "Vec<Step", "VecDeque", "push(", "HashMap", "panic!", "unwrap()",
+        ] {
+            let found = body
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("//"))
+                .any(|line| line.contains(word) && !line.contains("out.push("));
+            assert!(!found, "{word}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod doc_tests {
+    use super::*;
+    use crate::config;
+
+    #[test]
+    fn the_recovery_note_matches_the_order_the_policy_and_the_ack_table() {
+        let note = include_str!("../../../docs/recovery.md");
+        for (recovery, name) in [
+            (RecoveryMode::Rtl, "rtl"),
+            (RecoveryMode::Loiter, "loiter"),
+            (RecoveryMode::Land, "land"),
+        ] {
+            let cells: Vec<String> = fallback_order(recovery)
+                .iter()
+                .map(|step| match step {
+                    Step::SetMode(mode) => format!(
+                        "`MAV_CMD_DO_SET_MODE` AUTO_{}",
+                        format!("{mode:?}").to_uppercase()
+                    ),
+                    other => format!("`{:?}`", other.command()),
+                })
+                .collect();
+            let mut row = format!("| `{name}` | {} |", cells.join(" | "));
+            if cells.len() == 2 {
+                row.push_str(" none |");
+            }
+            assert!(note.contains(&row), "{row}");
+        }
+        let example = config::parse_str(include_str!("../../../config/example.toml")).unwrap();
+        for row in [
+            format!(
+                "| `recovery.retry_initial_ms` | {} |",
+                example.recovery.retry_initial_ms
+            ),
+            format!(
+                "| `recovery.retry_cap_ms` | {} |",
+                example.recovery.retry_cap_ms
+            ),
+            format!(
+                "| `recovery.attempts_per_step` | {} |",
+                example.recovery.attempts_per_step
+            ),
+        ] {
+            assert!(note.contains(&row), "{row}");
+        }
+        for value in 0..=6 {
+            let code = AckResult::from_raw(value).code();
+            assert!(note.contains(&format!("`ack:{code}`")), "{code}");
+        }
+        for item in [
+            "never sent twice",
+            "## When the vehicle never confirms",
+            "the latch stops sending",
+            "Revert stays latched until restart",
+            "`recovery_unconfirmed`",
+            "An ack never does.",
+            "No PX4 SITL run of the retry or the fallback is recorded.",
+            "is an owner decision",
+        ] {
+            assert!(note.contains(item), "{item}");
+        }
+        let requirements = include_str!("../../../docs/requirements.md");
+        assert!(requirements.contains("| R-R1 | recovery |"));
+        assert!(
+            requirements.contains("send no attempt twice from the tick thread and the watchdog")
+        );
+    }
+
+    #[test]
+    fn the_default_order_gives_up_when_the_note_says() {
+        let example = config::parse_str(include_str!("../../../config/example.toml")).unwrap();
+        let policy = Policy {
+            initial_ms: example.recovery.retry_initial_ms,
+            cap_ms: example.recovery.retry_cap_ms,
+            attempts_per_step: example.recovery.attempts_per_step,
+        };
+        let sends = u32::try_from(fallback_order(RecoveryMode::Rtl).len()).unwrap()
+            * policy.attempts_per_step;
+        let last: u64 = (1..sends).map(|n| policy.wait_after(n)).sum();
+        let gives_up = last + policy.wait_after(sends);
+        let note = include_str!("../../../docs/recovery.md");
+        let line = format!(
+            "there are {} sends over about {:.1} s. The latch gives up about {:.1} s after the first send.",
+            ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+                [sends as usize],
+            last as f64 / 1_000.0,
+            gives_up as f64 / 1_000.0
+        );
+        assert!(note.contains(&line), "{line}");
+    }
+}

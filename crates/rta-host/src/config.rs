@@ -39,7 +39,31 @@ pub struct Tick {
 #[serde(deny_unknown_fields)]
 pub struct Recovery {
     pub mode: RecoveryMode,
+    /// Wait after the first recovery send before the first resend. Doubles per resend.
+    #[serde(default = "default_retry_initial_ms")]
+    pub retry_initial_ms: u64,
+    /// Longest wait between resends.
+    #[serde(default = "default_retry_cap_ms")]
+    pub retry_cap_ms: u64,
+    /// Sends of one step of the fallback order before the next step.
+    #[serde(default = "default_attempts_per_step")]
+    pub attempts_per_step: u32,
 }
+
+fn default_retry_initial_ms() -> u64 {
+    500
+}
+
+fn default_retry_cap_ms() -> u64 {
+    2_000
+}
+
+fn default_attempts_per_step() -> u32 {
+    3
+}
+
+/// Upper bound on `recovery.attempts_per_step`. Keeps the whole order short and finite.
+pub const MAX_ATTEMPTS_PER_STEP: u32 = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -132,6 +156,22 @@ fn validate(config: &Config) -> Result<(), ConfigError> {
             "tick.mode_change_latency_ms must be at least 1".into(),
         ));
     }
+    let recovery = &config.recovery;
+    if recovery.retry_initial_ms < config.tick.mode_change_latency_ms {
+        return Err(ConfigError(
+            "recovery.retry_initial_ms must be at least tick.mode_change_latency_ms".into(),
+        ));
+    }
+    if recovery.retry_cap_ms < recovery.retry_initial_ms {
+        return Err(ConfigError(
+            "recovery.retry_cap_ms must be at least recovery.retry_initial_ms".into(),
+        ));
+    }
+    if recovery.attempts_per_step < 1 || recovery.attempts_per_step > MAX_ATTEMPTS_PER_STEP {
+        return Err(ConfigError(
+            "recovery.attempts_per_step must be from 1 to 10".into(),
+        ));
+    }
     if config.log.flush_every_n < 1 {
         return Err(ConfigError("log.flush_every_n must be at least 1".into()));
     }
@@ -168,6 +208,9 @@ mod tests {
         assert_eq!(config.tick.period_ms, 50);
         assert_eq!(config.tick.deadline_ms, 5);
         assert_eq!(config.recovery.mode, RecoveryMode::Rtl);
+        assert_eq!(config.recovery.retry_initial_ms, 500);
+        assert_eq!(config.recovery.retry_cap_ms, 2_000);
+        assert_eq!(config.recovery.attempts_per_step, 3);
         assert!(matches!(config.fence, Fence::Host { .. }));
         assert!(!config.shadow.enabled);
         assert_eq!(config.shadow.inference_budget_ms, 2);
@@ -183,6 +226,37 @@ mod tests {
     fn bad_enum_is_err() {
         let text = example().replace("mode = \"rtl\"", "mode = \"hover\"");
         assert!(parse_str(&text).is_err());
+    }
+
+    #[test]
+    fn the_retry_fields_default_and_are_checked() {
+        // The reviewed example leaves them out, so the defaults are what it runs with.
+        assert!(!example().contains("retry_"));
+        let explicit = |initial: u64, cap: u64, per_step: u32| {
+            example().replace(
+                "mode = \"rtl\"",
+                &format!(
+                    "mode = \"rtl\"\nretry_initial_ms = {initial}\nretry_cap_ms = {cap}\nattempts_per_step = {per_step}"
+                ),
+            )
+        };
+        let defaults = parse_str(&example()).unwrap().recovery;
+        assert_eq!(
+            parse_str(&explicit(500, 2_000, 3)).unwrap().recovery,
+            defaults
+        );
+        // Under the mode-change latency, cap under initial, zero or too many per step.
+        for (initial, cap, per_step) in [
+            (100, 2_000, 3),
+            (500, 400, 3),
+            (500, 2_000, 0),
+            (500, 2_000, 11),
+        ] {
+            assert!(
+                parse_str(&explicit(initial, cap, per_step)).is_err(),
+                "{initial} {cap} {per_step}"
+            );
+        }
     }
 
     #[test]

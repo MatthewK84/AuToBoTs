@@ -129,8 +129,13 @@ fn main() -> ExitCode {
     ) {
         Ok(report) => {
             println!(
-                "rta-host: stopped after {} ticks, overruns {}, recovery_sent {}, watchdog_fired {}",
-                report.ticks, report.overruns, report.recovery_sent, report.watchdog_fired
+                "rta-host: stopped after {} ticks, overruns {}, recovery_sent {}, recovery_attempts {}, recovery_confirmed {}, watchdog_fired {}",
+                report.ticks,
+                report.overruns,
+                report.recovery_sent,
+                report.recovery_attempts,
+                report.recovery_confirmed,
+                report.watchdog_fired
             );
             ExitCode::SUCCESS
         }
