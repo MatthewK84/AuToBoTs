@@ -14,6 +14,7 @@ use mavlink::dialects::common::{MavCmd, MavMessage, MavModeFlag, COMMAND_LONG_DA
 use rta_spec::RecoveryMode;
 
 use crate::command_out::px4_mode;
+use crate::reason::{Reason, Reasons};
 
 /// Resend schedule. The wait after attempt `n` is `initial_ms * 2^(n-1)`, capped at `cap_ms`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,17 +151,23 @@ impl AckResult {
         }
     }
 
-    /// Reason code in the tick log.
+    /// Reason code in the tick log. Allocates; the tick path uses `Display`.
     pub fn code(self) -> String {
+        self.to_string()
+    }
+}
+
+impl std::fmt::Display for AckResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Accepted => "accepted".into(),
-            Self::TemporarilyRejected => "temporarily_rejected".into(),
-            Self::Denied => "denied".into(),
-            Self::Unsupported => "unsupported".into(),
-            Self::Failed => "failed".into(),
-            Self::InProgress => "in_progress".into(),
-            Self::Cancelled => "cancelled".into(),
-            Self::Other(value) => format!("result_{value}"),
+            Self::Accepted => f.write_str("accepted"),
+            Self::TemporarilyRejected => f.write_str("temporarily_rejected"),
+            Self::Denied => f.write_str("denied"),
+            Self::Unsupported => f.write_str("unsupported"),
+            Self::Failed => f.write_str("failed"),
+            Self::InProgress => f.write_str("in_progress"),
+            Self::Cancelled => f.write_str("cancelled"),
+            Self::Other(value) => write!(f, "result_{value}"),
         }
     }
 }
@@ -325,24 +332,22 @@ impl Latch {
         }
     }
 
-    /// Reason codes for the tick log. Empty while idle.
-    pub fn reasons(&self, out: &mut Vec<String>) {
-        let state = match self.state() {
-            State::Idle => return,
-            State::Pending => "recovery_pending",
-            State::Confirmed => "recovery_confirmed",
-            State::Unconfirmed => "recovery_unconfirmed",
-        };
-        out.push(state.to_string());
-        out.push(format!("attempts:{}", self.attempts));
+    /// Reason codes for the tick log. Empty while idle. Allocates nothing.
+    pub fn reasons(&self, out: &mut Reasons) {
+        let state = self.state();
+        if state == State::Idle {
+            return;
+        }
+        out.push(Reason::Recovery(state));
+        out.push(Reason::Attempts(self.attempts));
         if let Some(step) = self.current() {
-            out.push(format!("step:{}", step.name()));
+            out.push(Reason::Step(step));
         }
         if let Some(ack) = self.last_ack {
-            out.push(format!("ack:{}", ack.code()));
+            out.push(Reason::Ack(ack));
         }
         if let Some(reason) = self.fallback {
-            out.push(format!("fallback:{}", reason.code()));
+            out.push(Reason::Fallback(reason));
         }
     }
 }
@@ -385,8 +390,9 @@ mod tests {
     fn idle_sends_nothing_and_logs_nothing() {
         let mut latch = Latch::new(RecoveryMode::Rtl, POLICY);
         assert!(drive(&mut latch, 0, 5_000, None).is_empty());
-        let mut reasons = Vec::new();
+        let mut reasons = Reasons::new();
         latch.reasons(&mut reasons);
+        let reasons = reasons.codes();
         assert!(reasons.is_empty());
     }
 
@@ -416,8 +422,9 @@ mod tests {
             ]
         );
         assert_eq!(latch.state(), State::Unconfirmed);
-        let mut reasons = Vec::new();
+        let mut reasons = Reasons::new();
         latch.reasons(&mut reasons);
+        let reasons = reasons.codes();
         assert!(reasons.contains(&"recovery_unconfirmed".to_string()));
         assert!(reasons.contains(&"attempts:9".to_string()));
     }
@@ -495,8 +502,9 @@ mod tests {
                 "{result:?}"
             );
             latch.sent(20, true);
-            let mut reasons = Vec::new();
+            let mut reasons = Reasons::new();
             latch.reasons(&mut reasons);
+            let reasons = reasons.codes();
             assert!(reasons.contains(&format!("fallback:{}", result.code())));
             assert!(reasons.contains(&"step:nav_rtl".to_string()));
             // The fallback is confirmed by the mode it asks for.
@@ -546,8 +554,9 @@ mod tests {
                 latch.poll(300, None),
                 Some(Step::SetMode(RecoveryMode::Rtl))
             );
-            let mut reasons = Vec::new();
+            let mut reasons = Reasons::new();
             latch.reasons(&mut reasons);
+            let reasons = reasons.codes();
             assert!(reasons.contains(&format!("ack:{}", result.code())));
             assert!(!reasons.iter().any(|r| r.starts_with("fallback:")));
         }

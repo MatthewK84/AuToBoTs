@@ -1,13 +1,22 @@
 //! Append-only tick log. Open failure is fatal. A write failure latches revert.
+//!
+//! A line is formatted into a fixed buffer owned by the log and written with one
+//! `write_all`. Appending allocates nothing. A line longer than [`LINE_CAPACITY`] is a write
+//! error, which latches Revert like any other.
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 
+use crate::reason::Reasons;
 use rta_spec::Verdict;
 use rta_switch::SwitchCommand;
 
 pub const VERSION: u32 = 1;
+
+/// Bytes in the fixed line buffer. The worst-case line, every float the longest `f64`
+/// rendering and every reason slot full, is about 2.6 KB (`the_longest_line_fits`).
+pub const LINE_CAPACITY: usize = 4_096;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TickRecord {
@@ -20,8 +29,8 @@ pub struct TickRecord {
     pub range_m: f64,
     pub verdict: Verdict,
     pub filter_intervened: bool,
-    pub reasons: Vec<String>,
-    pub command: String,
+    pub reasons: Reasons,
+    pub command: &'static str,
     pub eval_ms: u64,
     pub spec_hash: u64,
     pub alt_m: f64,
@@ -32,6 +41,7 @@ pub struct TickLog<W: Write> {
     writer: W,
     every: u32,
     since_flush: u32,
+    line: [u8; LINE_CAPACITY],
 }
 
 impl TickLog<File> {
@@ -43,6 +53,7 @@ impl TickLog<File> {
             writer: file,
             every,
             since_flush: 0,
+            line: [0; LINE_CAPACITY],
         })
     }
 }
@@ -54,13 +65,14 @@ impl<W: Write> TickLog<W> {
             writer,
             every,
             since_flush: 0,
+            line: [0; LINE_CAPACITY],
         }
     }
 
     pub fn append(&mut self, record: &TickRecord) -> io::Result<()> {
-        let reasons = record.reasons.join(",");
+        let mut cursor = io::Cursor::new(&mut self.line[..]);
         writeln!(
-            self.writer,
+            cursor,
             "tick={} fence_ok={} fix_age_ms={} link_age_ms={} fc_heartbeat_age_ms={} track_conf={} range_m={} verdict={} filter_intervened={} reasons={} command={} eval_ms={} spec_hash={:016x} indication={}",
             record.tick,
             record.fence_ok as u8,
@@ -71,12 +83,18 @@ impl<W: Write> TickLog<W> {
             record.range_m,
             verdict_name(record.verdict),
             record.filter_intervened as u8,
-            reasons,
+            record.reasons,
             record.command,
             record.eval_ms,
             record.spec_hash,
             record.indication,
         )?;
+        let written = usize::try_from(cursor.position()).unwrap_or(LINE_CAPACITY);
+        let line = self
+            .line
+            .get(..written)
+            .ok_or_else(|| io::Error::other("tick line longer than buffer"))?;
+        self.writer.write_all(line)?;
         self.since_flush += 1;
         if self.since_flush >= self.every {
             self.writer.flush()?;
@@ -94,11 +112,11 @@ impl<W: Write> TickLog<W> {
     }
 }
 
-pub fn command_name(command: &SwitchCommand) -> String {
+pub fn command_name(command: &SwitchCommand) -> &'static str {
     match command {
-        SwitchCommand::Mode { .. } => "mode".into(),
-        SwitchCommand::Setpoints { .. } => "setpoints".into(),
-        SwitchCommand::Idle => "idle".into(),
+        SwitchCommand::Mode { .. } => "mode",
+        SwitchCommand::Setpoints { .. } => "setpoints",
+        SwitchCommand::Idle => "idle",
     }
 }
 
@@ -126,6 +144,7 @@ fn verdict_name(verdict: Verdict) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reason::{Reason, REASON_CAPACITY};
     struct FailWrite;
 
     impl Write for FailWrite {
@@ -148,8 +167,12 @@ mod tests {
             range_m: 40.0,
             verdict: Verdict::Inhibit,
             filter_intervened: true,
-            reasons: vec!["weak_track".into()],
-            command: "idle".into(),
+            reasons: {
+                let mut reasons = Reasons::new();
+                reasons.push(Reason::Spec("weak_track"));
+                reasons
+            },
+            command: "idle",
             eval_ms: 1,
             spec_hash: 7,
             alt_m: 0.0,
@@ -221,5 +244,71 @@ mod tests {
         let text = std::fs::read_to_string(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         assert!(text.contains("verdict=inhibit filter_intervened=1"));
+    }
+
+    #[test]
+    fn the_line_is_byte_identical_to_the_old_format() {
+        let mut record = sample();
+        record.reasons.push(Reason::Latched);
+        let mut buf = Vec::new();
+        let mut log = TickLog::from_writer(&mut buf, 1);
+        log.append(&record).unwrap();
+        let old = format!(
+            "tick={} fence_ok={} fix_age_ms={} link_age_ms={} fc_heartbeat_age_ms={} track_conf={} range_m={} verdict={} filter_intervened={} reasons={} command={} eval_ms={} spec_hash={:016x} indication={}\n",
+            record.tick,
+            record.fence_ok as u8,
+            record.fix_age_ms,
+            record.link_age_ms,
+            record.fc_heartbeat_age_ms,
+            record.track_conf,
+            record.range_m,
+            "inhibit",
+            record.filter_intervened as u8,
+            ["weak_track", "latched"].join(","),
+            record.command,
+            record.eval_ms,
+            record.spec_hash,
+            record.indication,
+        );
+        assert_eq!(String::from_utf8(buf).unwrap(), old);
+    }
+
+    #[test]
+    fn the_longest_line_fits() {
+        let mut record = sample();
+        record.tick = u64::MAX;
+        // The longest `Display` of an f64 is the smallest subnormal, written out in full.
+        let longest = -f64::from_bits(1);
+        assert!(f64::MAX.to_string().len() < longest.to_string().len());
+        record.fix_age_ms = longest;
+        record.link_age_ms = longest;
+        record.fc_heartbeat_age_ms = longest;
+        record.track_conf = longest;
+        record.range_m = longest;
+        record.eval_ms = u64::MAX;
+        record.spec_hash = u64::MAX;
+        record.indication = "indication=commit_inhibited reason=grant_revoked".into();
+        record.reasons = Reasons::new();
+        for _ in 0..REASON_CAPACITY {
+            record.reasons.push(Reason::Fallback(
+                crate::recovery::AckResult::TemporarilyRejected,
+            ));
+        }
+        let mut buf = Vec::new();
+        let mut log = TickLog::from_writer(&mut buf, 1);
+        log.append(&record).unwrap();
+        // About 2.6 KB today; keep at least 1 KB of headroom.
+        assert!(buf.len() + 1_024 < LINE_CAPACITY, "{}", buf.len());
+        assert!(buf.ends_with(b"\n"));
+    }
+
+    #[test]
+    fn a_line_longer_than_the_buffer_is_a_write_error() {
+        let mut record = sample();
+        record.indication = "x".repeat(LINE_CAPACITY);
+        let mut buf = Vec::new();
+        let mut log = TickLog::from_writer(&mut buf, 1);
+        assert!(log.append(&record).is_err());
+        assert!(buf.is_empty(), "a partial line was written");
     }
 }

@@ -18,6 +18,7 @@ use crate::link_age::{LinkAge, LinkMessage};
 use crate::mavlink_link::{
     decode_frames, encode, heartbeat, CommandAck, Frame, MAX_FRAME, MAX_FRAMES_PER_DATAGRAM,
 };
+use crate::reason::{Reason, Reasons};
 use crate::recovery::{AckResult, Latch, Policy, State, Step};
 use crate::spec::SpecLimits;
 use crate::stale::present_track;
@@ -375,7 +376,7 @@ pub fn run<W: Write>(
         let vehicle = shared.snapshot();
         let reported = vehicle.fc_custom_mode.and_then(reported_mode);
         let request = complex.request();
-        let mut reasons = Vec::new();
+        let mut reasons = Reasons::new();
         let (verdict, late, eval_ms, presented) = match present(config, &vehicle, now_ms) {
             Ok(presented) => {
                 // The tick thread waits at most `deadline` for the worker, whether or not the
@@ -388,18 +389,18 @@ pub fn run<W: Write>(
                     }
                     Outcome::Late { took } => (None, true, millis(took), Some(presented)),
                     Outcome::Busy | Outcome::Gone | Outcome::Faulted => {
-                        reasons.push("eval_fault".to_string());
+                        reasons.push(Reason::EvalFault);
                         (None, false, 0, Some(presented))
                     }
                 }
             }
             Err(_) => {
-                reasons.push("record".to_string());
+                reasons.push(Reason::Record);
                 (None, false, 0, None)
             }
         };
         if late {
-            reasons.push("late".to_string());
+            reasons.push(Reason::Late);
         }
         // The startup gate: monitor only while disarmed or not ready (`gate.rs`).
         let heard = vehicle.fc_heartbeat_ms.is_some();
@@ -418,7 +419,7 @@ pub fn run<W: Write>(
         let latched =
             shared.recovery_engaged() || log_failed || worker.faulted() || gated.force_revert;
         if latched {
-            reasons.push("latched".to_string());
+            reasons.push(Reason::Latched);
         }
         let command = closed.command(TickCase {
             verdict: if latched {
@@ -444,7 +445,7 @@ pub fn run<W: Write>(
         let target = vehicle.fc_system.unwrap_or(config.link.system_id);
         if !heard {
             // Nothing is commanded to a flight controller that has not been heard.
-            reasons.push("no_fc".to_string());
+            reasons.push(Reason::NoFc);
         } else if !gated.act {
             // Monitor only. The gate has logged `disarmed` or `not_ready`.
         } else {
@@ -453,7 +454,7 @@ pub fn run<W: Write>(
                 SwitchCommand::Setpoints { .. } if request.is_none() => {
                     // The switch fills a missing request with zeros. A zero setpoint is a
                     // real position, so nothing is forwarded when nothing was asked.
-                    reasons.push("no_request".to_string());
+                    reasons.push(Reason::NoRequest);
                 }
                 SwitchCommand::Setpoints { .. } => {
                     if let Some(message) = to_message(&command, target) {
@@ -464,7 +465,7 @@ pub fn run<W: Write>(
             }
             // Resends run whatever this tick decided, until the latch is confirmed or used up.
             if let Some(step) = shared.drive_recovery(&mut sender, target, now_ms, reported) {
-                reasons.push(format!("sent:{}", step.name()));
+                reasons.push(Reason::Sent(step));
             }
         }
         lock(&shared.recovery).reasons(&mut reasons);
@@ -488,6 +489,7 @@ pub fn run<W: Write>(
             eval_ms,
             spec_hash,
             alt_m: vehicle.alt_m,
+            // `String::new` does not allocate.
             indication: String::new(),
         };
         if log.append(&line).is_err() {
@@ -1930,6 +1932,9 @@ mod doc_tests {
             "`not_ready_at_arm`",
             "udpin:host:port",
             "No PX4 SITL run of this loop is recorded.",
+            "A steady-state tick allocates nothing on the tick thread.",
+            "crates/rta-host/tests/tick_alloc.rs",
+            "byte-identical",
         ] {
             assert!(note.contains(item), "{item}");
         }

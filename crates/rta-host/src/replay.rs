@@ -2,6 +2,7 @@
 
 use crate::eval::Evaluator;
 use crate::monitor::build_once;
+use crate::reason::Reasons;
 use crate::tick_log::{TickRecord, VERSION};
 use rta_spec::{InputRecord, Verdict};
 use std::path::Path;
@@ -110,8 +111,8 @@ fn parse_record(line: &str) -> Result<TickRecord, &'static str> {
     let mut track_conf = None;
     let mut range_m = None;
     let mut verdict = None;
-    let mut reasons = Vec::new();
-    let mut command = String::new();
+    // Replay checks the verdict only. Reasons and the command are read for the record shape
+    // and not compared.
     let mut eval_ms = 0;
     let mut spec_hash = 0;
     let mut alt_m = 0.0;
@@ -129,12 +130,7 @@ fn parse_record(line: &str) -> Result<TickRecord, &'static str> {
             "track_conf" => track_conf = value.parse().ok(),
             "range_m" => range_m = value.parse().ok(),
             "verdict" => verdict = parse_verdict(value),
-            "reasons" => {
-                if !value.is_empty() {
-                    reasons = value.split(',').map(str::to_string).collect();
-                }
-            }
-            "command" => command = value.to_string(),
+            "reasons" | "command" => {}
             "eval_ms" => eval_ms = value.parse().unwrap_or(0),
             "spec_hash" => spec_hash = u64::from_str_radix(value, 16).unwrap_or(0),
             "alt_m" => alt_m = value.parse().map_err(|_| "alt")?,
@@ -152,8 +148,8 @@ fn parse_record(line: &str) -> Result<TickRecord, &'static str> {
         range_m: range_m.ok_or("field")?,
         verdict: verdict.ok_or("field")?,
         filter_intervened,
-        reasons,
-        command,
+        reasons: Reasons::new(),
+        command: "",
         eval_ms,
         spec_hash,
         alt_m,

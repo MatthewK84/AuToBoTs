@@ -2,15 +2,25 @@
 
 use crate::event::event;
 use crate::monitor::BuiltMonitor;
+use crate::reason::{Reason, Reasons};
 use rta_spec::{InputRecord, Verdict};
 use rtlola_interpreter::monitor::Change;
 use rtlola_interpreter::Value;
 use std::time::Duration;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TickResult {
     pub verdict: Verdict,
-    pub reasons: Vec<String>,
+    pub reasons: Reasons,
+}
+
+fn fault() -> TickResult {
+    let mut reasons = Reasons::new();
+    reasons.push(Reason::Fault);
+    TickResult {
+        verdict: Verdict::Revert,
+        reasons,
+    }
 }
 
 #[derive(Debug, Default)]
@@ -30,22 +40,14 @@ impl Evaluator {
         at_ms: u64,
     ) -> TickResult {
         if self.faulted {
-            return TickResult {
-                verdict: Verdict::Revert,
-                reasons: vec!["fault".into()],
-            };
+            return fault();
         }
         match monitor.accept(event(record), monotonic_to_interpreter(at_ms)) {
             Err(_) => {
                 self.faulted = true;
-                TickResult {
-                    verdict: Verdict::Revert,
-                    reasons: vec!["fault".into()],
-                }
+                fault()
             }
-            Ok(verdicts) => map_changes(&verdicts.event, |id| {
-                monitor.borrow_monitor().name_for_output(id).to_string()
-            }),
+            Ok(verdicts) => map_changes(&verdicts.event, |id| monitor.output_name(id)),
         }
     }
 }
@@ -54,7 +56,7 @@ pub fn monotonic_to_interpreter(at_ms: u64) -> Duration {
     Duration::from_millis(at_ms)
 }
 
-pub fn map_bools(revert: Option<bool>, inhibit: Option<bool>, reasons: Vec<String>) -> TickResult {
+pub fn map_bools(revert: Option<bool>, inhibit: Option<bool>, reasons: Reasons) -> TickResult {
     let verdict = match (revert, inhibit) {
         (None, _) | (_, None) => Verdict::Revert,
         (Some(true), _) => Verdict::Revert,
@@ -69,17 +71,17 @@ fn map_changes<F>(
     name_of: F,
 ) -> TickResult
 where
-    F: Fn(rtlola_frontend::mir::OutputReference) -> String,
+    F: Fn(rtlola_frontend::mir::OutputReference) -> &'static str,
 {
     let mut revert = None;
     let mut inhibit = None;
-    let mut reasons = Vec::new();
+    let mut reasons = Reasons::new();
     for (id, updates) in changes {
         let name = name_of(*id);
         for update in updates {
             if let Change::Value(_, Value::Bool(value)) = update {
-                if *value && !matches!(name.as_str(), "revert" | "inhibit") {
-                    reasons.push(name.clone());
+                if *value && !matches!(name, "revert" | "inhibit") {
+                    reasons.push(Reason::Spec(name));
                 }
                 if name == "revert" {
                     revert = Some(*value);
@@ -105,19 +107,19 @@ mod tests {
     #[test]
     fn mapping_table() {
         assert_eq!(
-            map_bools(Some(true), Some(false), vec![]).verdict,
+            map_bools(Some(true), Some(false), Reasons::new()).verdict,
             Verdict::Revert
         );
         assert_eq!(
-            map_bools(Some(false), Some(true), vec![]).verdict,
+            map_bools(Some(false), Some(true), Reasons::new()).verdict,
             Verdict::Inhibit
         );
         assert_eq!(
-            map_bools(Some(false), Some(false), vec![]).verdict,
+            map_bools(Some(false), Some(false), Reasons::new()).verdict,
             Verdict::Pass
         );
         assert_eq!(
-            map_bools(None, Some(false), vec![]).verdict,
+            map_bools(None, Some(false), Reasons::new()).verdict,
             Verdict::Revert
         );
     }

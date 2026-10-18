@@ -52,6 +52,9 @@ struct Response {
 }
 
 /// What one tick got from the worker.
+// `Done` carries a fixed `Reasons` (about 600 bytes). Boxing it would allocate every tick,
+// which the per-tick allocation test forbids; the value lives on the stack.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     /// The answer to this tick, inside the deadline.
@@ -233,7 +236,7 @@ mod tests {
             thread::sleep(self.delay);
             TickResult {
                 verdict: Verdict::Pass,
-                reasons: Vec::new(),
+                reasons: crate::reason::Reasons::new(),
             }
         }
     }

@@ -1,6 +1,6 @@
 //! One monitor, built at startup. A load or type error returns before any socket type exists.
 
-use rtlola_frontend::mir::{FloatTy, Type};
+use rtlola_frontend::mir::{FloatTy, OutputReference, Type};
 use rtlola_frontend::{parse, ParserConfig, RtLolaMir};
 use rtlola_interpreter::config::OfflineMode;
 use rtlola_interpreter::input::ArrayFactory;
@@ -22,6 +22,8 @@ type HostMonitor = Monitor<
 pub struct BuiltMonitor {
     monitor: HostMonitor,
     fail_next: bool,
+    /// Output names, interned once at build so a tick does not copy them.
+    names: Vec<(OutputReference, &'static str)>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -41,10 +43,16 @@ pub fn build_once(spec: &str) -> Result<BuiltMonitor, BuildError> {
         .with_verdict::<Incremental>()
         .monitor()
         .map_err(|err| BuildError::Parse(err.to_string()))?;
+    let names = monitor
+        .ir()
+        .output_refs()
+        .map(|id| (id, crate::reason::intern(monitor.name_for_output(id))))
+        .collect();
     BUILDS.fetch_add(1, Ordering::SeqCst);
     Ok(BuiltMonitor {
         monitor,
         fail_next: false,
+        names,
     })
 }
 
@@ -79,6 +87,14 @@ pub fn build_count() -> u64 {
 impl BuiltMonitor {
     pub fn borrow_monitor(&self) -> &HostMonitor {
         &self.monitor
+    }
+
+    /// The interned name of one output. An unknown reference is `"unknown_output"`.
+    pub fn output_name(&self, id: OutputReference) -> &'static str {
+        self.names
+            .iter()
+            .find(|(known, _)| *known == id)
+            .map_or("unknown_output", |(_, name)| name)
     }
 
     pub fn fail_next(&mut self) {

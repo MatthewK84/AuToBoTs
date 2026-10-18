@@ -4,6 +4,7 @@
 //! failure each latch Revert until restart, whatever command the tick would have sent. The
 //! heartbeat limit is the spec's `heartbeat_stale` threshold (`spec::limits`), not a copy.
 
+use crate::ring::Ring;
 use crate::spec::SpecLimits;
 use rta_spec::{RecoveryMode, Verdict};
 use rta_switch::{decide, Request, SwitchCommand};
@@ -27,7 +28,7 @@ pub struct FailClosed {
     heartbeat_limit_ms: f64,
     faulted: bool,
     write_fault: bool,
-    log: Vec<String>,
+    log: Ring<&'static str, NOTE_CAPACITY>,
 }
 
 impl FailClosed {
@@ -36,7 +37,7 @@ impl FailClosed {
             heartbeat_limit_ms: limits.heartbeat_stale_ms,
             faulted: false,
             write_fault: false,
-            log: Vec::new(),
+            log: Ring::new(""),
         }
     }
 
@@ -84,13 +85,15 @@ impl FailClosed {
         }
     }
 
-    /// The note log keeps the last `NOTE_CAPACITY` lines. A late verdict every tick does not
-    /// grow it without bound.
-    fn note(&mut self, line: &str) {
-        if self.log.len() >= NOTE_CAPACITY {
-            self.log.remove(0);
-        }
-        self.log.push(line.into());
+    /// The note log is a ring of the last `NOTE_CAPACITY` static lines. A late verdict every
+    /// tick overwrites the oldest note; it neither grows nor allocates.
+    fn note(&mut self, line: &'static str) {
+        self.log.push(line);
+    }
+
+    /// The notes, oldest first.
+    pub fn notes(&self) -> impl Iterator<Item = &&'static str> + '_ {
+        self.log.iter()
     }
 }
 
@@ -148,6 +151,16 @@ mod tests {
         let command = host.command(case(Some(Verdict::Pass), true, Some(0.0), true));
         assert!(matches!(command, SwitchCommand::Mode { .. }));
         assert!(host.log.iter().any(|line| line.contains("discarded")));
+    }
+
+    #[test]
+    fn a_late_verdict_every_tick_keeps_the_note_ring_at_capacity() {
+        let mut host = host();
+        for _ in 0..10 * NOTE_CAPACITY {
+            host.command(case(Some(Verdict::Pass), true, Some(0.0), true));
+        }
+        assert_eq!(host.notes().count(), NOTE_CAPACITY);
+        assert!(host.notes().all(|line| line.contains("discarded")));
     }
 
     #[test]

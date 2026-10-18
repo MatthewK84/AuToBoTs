@@ -28,6 +28,14 @@ The vehicle state is fixed size. A status text changes no field. The three threa
 
 The loop is paced by a monotonic deadline that advances one period per tick. An overrun restarts the schedule from now and is counted.
 
+## Allocation
+
+A steady-state tick allocates nothing on the tick thread. The reasons are a fixed `Reasons` value of enum codes (`crates/rta-host/src/reason.rs`), at most 24, the last slot `truncated` on overflow. The tick log formats each line into a 4096-byte buffer it owns and writes it with one `write_all`; a longer line is a write error and latches Revert. The command name is static and the record is built on the stack. `FailClosed` keeps its notes in a 64-entry ring, and the legacy `status_log` fields keep the last 16 status texts of at most 50 bytes each in a ring. Spec output names are interned once when the monitor is built.
+
+The one per-tick allocation left is inside the RTLola interpreter on the evaluation worker: `rtlola-interpreter` 0.11.0 makes 15 allocations for an inhibit event and 21 for a revert event with `spec/monitor.lola`. `crates/rta-host/tests/tick_alloc.rs` counts every allocation with a global allocator. After warm-up it requires zero on the tick thread, and for the whole process no more than the interpreter's own count for one event, measured beside it. The receive thread, the watchdog, and the worker handoff add nothing.
+
+The log line is byte-identical to the earlier format, so the log version stays `1` and the golden replay is unchanged.
+
 ## Recovery
 
 Recovery is resent until the flight controller reports it. A Revert command engages one recovery latch. The tick thread and the watchdog drive that latch under one lock, so they never double-send. It resends on a bounded backoff, reads `COMMAND_ACK`, and falls back from `DO_SET_MODE` to `NAV_RETURN_TO_LAUNCH` and then `NAV_LAND` on `DENIED` or `UNSUPPORTED`. When the order is used up unconfirmed, it stops sending and stays latched. The policy, the ack table, and the log codes are in `docs/recovery.md`.
