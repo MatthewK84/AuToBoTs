@@ -30,6 +30,8 @@ pub enum Reason {
     NoFc,
     NoRequest,
     NotSent,
+    /// A setpoint whose position or yaw is not finite as an `f32`. Not forwarded.
+    BadSetpoint,
     /// A recovery step went on the wire this tick.
     Sent(Step),
     /// The recovery latch state, when engaged.
@@ -58,6 +60,7 @@ impl fmt::Display for Reason {
             Reason::NoFc => f.write_str("no_fc"),
             Reason::NoRequest => f.write_str("no_request"),
             Reason::NotSent => f.write_str("not_sent"),
+            Reason::BadSetpoint => f.write_str("bad_setpoint"),
             Reason::Sent(step) => write!(f, "sent:{}", step.name()),
             Reason::Recovery(state) => f.write_str(match state {
                 State::Idle => "recovery_idle",
@@ -188,6 +191,7 @@ mod tests {
             Reason::NoFc,
             Reason::NoRequest,
             Reason::NotSent,
+            Reason::BadSetpoint,
             Reason::Sent(Step::SetMode(RecoveryMode::Rtl)),
             Reason::Recovery(State::Pending),
             Reason::Attempts(3),
@@ -201,7 +205,7 @@ mod tests {
         assert_eq!(
             reasons.to_string(),
             "fix_stale,eval_fault,record,late,ready_timeout,not_ready_at_arm,disarmed,not_ready,\
-             latched,no_fc,no_request,not_sent,sent:set_mode,recovery_pending,attempts:3,\
+             latched,no_fc,no_request,not_sent,bad_setpoint,sent:set_mode,recovery_pending,attempts:3,\
              step:nav_rtl,ack:result_9,fallback:denied,fault"
         );
     }

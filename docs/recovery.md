@@ -34,7 +34,7 @@ The order moves to the next step when a step's sends are used up, or at once on 
 
 ## COMMAND_ACK
 
-The receive thread reads `COMMAND_ACK` (id 77) from its raw payload. The common dialect in the pinned mavlink crate has no `MAV_RESULT_IN_PROGRESS`, and the typed decoder would drop that frame. An ack counts only when it comes from the flight controller's system id and names the command currently in flight. An ack for an earlier step is stale and changes nothing.
+The receive thread reads `COMMAND_ACK` (id 77) from its raw payload. The common dialect in the pinned mavlink crate has no `MAV_RESULT_IN_PROGRESS`, and the typed decoder would drop that frame. An ack counts only when it comes from the flight controller's system and component (from its heartbeat header) and names the command currently in flight. An ack for an earlier step is stale and changes nothing.
 
 | Result | Action | Log code |
 | --- | --- | --- |

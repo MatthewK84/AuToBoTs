@@ -12,7 +12,40 @@ use rta_spec::RecoveryMode;
 use rta_switch::authority::{indication_line, Indication};
 use rta_switch::SwitchCommand;
 
-pub fn to_message(command: &SwitchCommand, target_system: u8) -> Option<MavMessage> {
+/// Who a command is addressed to: the system and component in the header of the flight
+/// controller's `HEARTBEAT`, as heard. Never a configured or hard-coded id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Target {
+    pub system: u8,
+    pub component: u8,
+}
+
+/// `SET_POSITION_TARGET_LOCAL_NED.type_mask` for position and yaw only: velocity,
+/// acceleration, and yaw rate are ignored (`0x09F8`). `FORCE_SET` is clear.
+pub const POSITION_AND_YAW: PositionTargetTypemask = PositionTargetTypemask::from_bits_truncate(
+    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_VX_IGNORE.bits()
+        | PositionTargetTypemask::POSITION_TARGET_TYPEMASK_VY_IGNORE.bits()
+        | PositionTargetTypemask::POSITION_TARGET_TYPEMASK_VZ_IGNORE.bits()
+        | PositionTargetTypemask::POSITION_TARGET_TYPEMASK_AX_IGNORE.bits()
+        | PositionTargetTypemask::POSITION_TARGET_TYPEMASK_AY_IGNORE.bits()
+        | PositionTargetTypemask::POSITION_TARGET_TYPEMASK_AZ_IGNORE.bits()
+        | PositionTargetTypemask::POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE.bits(),
+);
+
+/// `time_boot_ms` from the companion's monotonic run clock. It wraps at 2^32 ms, as the
+/// field does.
+pub fn time_boot_ms(now_ms: u64) -> u32 {
+    (now_ms % (u64::from(u32::MAX) + 1)) as u32
+}
+
+/// The outbound message for one command. `Idle` is `None`. A `Setpoints` command whose
+/// position or yaw is not finite as an `f32` is also `None`: nothing is forwarded, and the
+/// caller logs `bad_setpoint`.
+pub fn to_message(
+    command: &SwitchCommand,
+    target: Target,
+    time_boot_ms: u32,
+) -> Option<MavMessage> {
     match command {
         SwitchCommand::Mode { recovery } => Some(MavMessage::COMMAND_LONG(COMMAND_LONG_DATA {
             param1: f32::from(MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED.bits()),
@@ -23,32 +56,42 @@ pub fn to_message(command: &SwitchCommand, target_system: u8) -> Option<MavMessa
             param6: 0.0,
             param7: 0.0,
             command: MavCmd::MAV_CMD_DO_SET_MODE,
-            target_system,
-            target_component: 1,
+            target_system: target.system,
+            target_component: target.component,
             confirmation: 0,
         })),
         SwitchCommand::Setpoints {
-            north, east, down, ..
-        } => Some(MavMessage::SET_POSITION_TARGET_LOCAL_NED(
-            SET_POSITION_TARGET_LOCAL_NED_DATA {
-                time_boot_ms: 0,
-                x: *north as f32,
-                y: *east as f32,
-                z: *down as f32,
-                vx: 0.0,
-                vy: 0.0,
-                vz: 0.0,
-                afx: 0.0,
-                afy: 0.0,
-                afz: 0.0,
-                yaw: 0.0,
-                yaw_rate: 0.0,
-                type_mask: PositionTargetTypemask::empty(),
-                target_system,
-                target_component: 1,
-                coordinate_frame: mavlink::dialects::common::MavFrame::MAV_FRAME_LOCAL_NED,
-            },
-        )),
+            north,
+            east,
+            down,
+            yaw,
+            ..
+        } => {
+            let (x, y, z, yaw) = (*north as f32, *east as f32, *down as f32, *yaw as f32);
+            if !(x.is_finite() && y.is_finite() && z.is_finite() && yaw.is_finite()) {
+                return None;
+            }
+            Some(MavMessage::SET_POSITION_TARGET_LOCAL_NED(
+                SET_POSITION_TARGET_LOCAL_NED_DATA {
+                    time_boot_ms,
+                    x,
+                    y,
+                    z,
+                    vx: 0.0,
+                    vy: 0.0,
+                    vz: 0.0,
+                    afx: 0.0,
+                    afy: 0.0,
+                    afz: 0.0,
+                    yaw,
+                    yaw_rate: 0.0,
+                    type_mask: POSITION_AND_YAW,
+                    target_system: target.system,
+                    target_component: target.component,
+                    coordinate_frame: mavlink::dialects::common::MavFrame::MAV_FRAME_LOCAL_NED,
+                },
+            ))
+        }
         SwitchCommand::Idle => None,
     }
 }
@@ -139,6 +182,11 @@ mod tests {
     use std::net::UdpSocket;
     use std::time::Duration;
 
+    const FC: Target = Target {
+        system: 1,
+        component: 1,
+    };
+
     fn message_id(frame: &[u8]) -> u32 {
         u32::from(frame[7]) | (u32::from(frame[8]) << 8) | (u32::from(frame[9]) << 16)
     }
@@ -164,7 +212,7 @@ mod tests {
             RecoveryMode::Loiter,
             RecoveryMode::Rtl,
         );
-        let message = to_message(&command, 1).unwrap();
+        let message = to_message(&command, FC, 0).unwrap();
         assert!(matches!(message, MavMessage::COMMAND_LONG(_)));
         link.send(message).unwrap();
         let frame = mavlink_link::recv_frame(&sink, Duration::from_millis(1_500)).unwrap();
@@ -174,14 +222,14 @@ mod tests {
     #[test]
     fn recovered_report_sends_nothing() {
         let command = decide(Verdict::Revert, None, RecoveryMode::Rtl, RecoveryMode::Rtl);
-        assert!(to_message(&command, 1).is_none());
+        assert!(to_message(&command, FC, 0).is_none());
         assert_eq!(reported_mode(0x0504_0000), Some(RecoveryMode::Rtl));
     }
 
     const ALL: [RecoveryMode; 3] = [RecoveryMode::Rtl, RecoveryMode::Loiter, RecoveryMode::Land];
 
     fn set_mode_params(recovery: RecoveryMode) -> (f32, f32, f32) {
-        match to_message(&SwitchCommand::Mode { recovery }, 1) {
+        match to_message(&SwitchCommand::Mode { recovery }, FC, 0) {
             Some(MavMessage::COMMAND_LONG(data)) => {
                 assert_eq!(data.command, MavCmd::MAV_CMD_DO_SET_MODE);
                 (data.param1, data.param2, data.param3)
@@ -267,7 +315,8 @@ mod tests {
             &SwitchCommand::Mode {
                 recovery: RecoveryMode::Land,
             },
-            1,
+            FC,
+            0,
         )
         .unwrap();
         link.send(message).unwrap();
@@ -284,5 +333,125 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    /// Send one message over a real loopback UDP link and decode what arrives.
+    fn over_loopback(message: MavMessage) -> MavMessage {
+        let sink = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let endpoint = Endpoint::Udp {
+            host: "127.0.0.1".into(),
+            port: sink.local_addr().unwrap().port(),
+        };
+        let mut link = MavLink::open(&endpoint, 1, 191).unwrap();
+        link.send(message).unwrap();
+        let frame = mavlink_link::recv_frame(&sink, Duration::from_millis(1_500)).unwrap();
+        let mut reader = mavlink::peek_reader::PeekReader::new(frame.as_slice());
+        let (_, decoded) = mavlink::read_v2_msg::<MavMessage, _>(&mut reader).unwrap();
+        decoded
+    }
+
+    fn setpoints(north: f64, east: f64, down: f64, yaw: f64) -> SwitchCommand {
+        SwitchCommand::Setpoints {
+            north,
+            east,
+            down,
+            yaw,
+            commit: false,
+        }
+    }
+
+    #[test]
+    fn a_setpoint_on_the_wire_is_position_and_yaw_to_the_heard_flight_controller() {
+        let heard = Target {
+            system: 42,
+            component: 7,
+        };
+        let message = to_message(&setpoints(12.5, -3.25, -30.0, 1.5), heard, 123_456).unwrap();
+        match over_loopback(message) {
+            MavMessage::SET_POSITION_TARGET_LOCAL_NED(data) => {
+                assert_eq!(data.type_mask.bits(), 0x09F8);
+                assert_eq!(data.type_mask, POSITION_AND_YAW);
+                for ignored in [
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_VX_IGNORE,
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_VY_IGNORE,
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_VZ_IGNORE,
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_AX_IGNORE,
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_AY_IGNORE,
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_AZ_IGNORE,
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE,
+                ] {
+                    assert!(data.type_mask.contains(ignored), "{ignored:?}");
+                }
+                for used in [
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_X_IGNORE,
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_Y_IGNORE,
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_Z_IGNORE,
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_YAW_IGNORE,
+                    PositionTargetTypemask::POSITION_TARGET_TYPEMASK_FORCE_SET,
+                ] {
+                    assert!(!data.type_mask.contains(used), "{used:?}");
+                }
+                assert_eq!((data.x, data.y, data.z), (12.5, -3.25, -30.0));
+                assert_eq!(data.yaw, 1.5);
+                assert_eq!(data.yaw_rate, 0.0);
+                assert_eq!(data.time_boot_ms, 123_456);
+                assert_eq!(data.target_system, 42);
+                assert_eq!(data.target_component, 7);
+                assert_eq!(
+                    data.coordinate_frame,
+                    mavlink::dialects::common::MavFrame::MAV_FRAME_LOCAL_NED
+                );
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn set_mode_on_the_wire_goes_to_the_heard_component() {
+        let heard = Target {
+            system: 9,
+            component: 200,
+        };
+        let message = to_message(
+            &SwitchCommand::Mode {
+                recovery: RecoveryMode::Rtl,
+            },
+            heard,
+            0,
+        )
+        .unwrap();
+        match over_loopback(message) {
+            MavMessage::COMMAND_LONG(data) => {
+                assert_eq!(data.target_system, 9);
+                assert_eq!(data.target_component, 200);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_non_finite_setpoint_is_not_forwarded() {
+        for (north, east, down, yaw) in [
+            (f64::NAN, 0.0, 0.0, 0.0),
+            (0.0, f64::INFINITY, 0.0, 0.0),
+            (0.0, 0.0, f64::NEG_INFINITY, 0.0),
+            (0.0, 0.0, 0.0, f64::NAN),
+            // Finite as f64, infinite as the f32 the field carries.
+            (1e300, 0.0, 0.0, 0.0),
+        ] {
+            assert!(
+                to_message(&setpoints(north, east, down, yaw), FC, 0).is_none(),
+                "{north} {east} {down} {yaw}"
+            );
+        }
+    }
+
+    #[test]
+    fn time_boot_ms_wraps_at_two_to_the_thirty_two() {
+        assert_eq!(time_boot_ms(0), 0);
+        assert_eq!(time_boot_ms(1_234), 1_234);
+        assert_eq!(time_boot_ms(u64::from(u32::MAX)), u32::MAX);
+        assert_eq!(time_boot_ms(u64::from(u32::MAX) + 1), 0);
+        assert_eq!(time_boot_ms(u64::from(u32::MAX) + 6), 5);
     }
 }

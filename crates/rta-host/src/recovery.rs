@@ -13,7 +13,7 @@
 use mavlink::dialects::common::{MavCmd, MavMessage, MavModeFlag, COMMAND_LONG_DATA};
 use rta_spec::RecoveryMode;
 
-use crate::command_out::px4_mode;
+use crate::command_out::{px4_mode, Target};
 use crate::reason::{Reason, Reasons};
 
 /// Resend schedule. The wait after attempt `n` is `initial_ms * 2^(n-1)`, capped at `cap_ms`.
@@ -72,7 +72,8 @@ impl Step {
     }
 
     /// The `COMMAND_LONG` for this step. `confirmation` counts resends, as MAVLink asks.
-    pub fn message(self, target_system: u8, confirmation: u8) -> MavMessage {
+    /// Addressed to the flight controller's heard system and component.
+    pub fn message(self, target: Target, confirmation: u8) -> MavMessage {
         let (param1, param2, param3, rest) = match self {
             Step::SetMode(mode) => {
                 let px4 = px4_mode(mode);
@@ -96,8 +97,8 @@ impl Step {
             param6: rest,
             param7: rest,
             command: self.command(),
-            target_system,
-            target_component: 1,
+            target_system: target.system,
+            target_component: target.component,
             confirmation,
         })
     }
@@ -601,7 +602,13 @@ mod tests {
             assert_eq!(order[0], Step::SetMode(recovery));
             assert_eq!(order.last(), Some(&Step::Land));
             for step in order {
-                if let MavMessage::COMMAND_LONG(data) = step.message(1, 0) {
+                if let MavMessage::COMMAND_LONG(data) = step.message(
+                    Target {
+                        system: 1,
+                        component: 1,
+                    },
+                    0,
+                ) {
                     assert_eq!(data.command, step.command());
                     if let Step::SetMode(_) = step {
                         assert_eq!(data.param2, 4.0);

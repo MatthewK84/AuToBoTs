@@ -12,8 +12,24 @@ This is the contract for the one link the adapter owns. There is no second socke
 | `COMMAND_LONG` with `MAV_CMD_DO_SET_MODE` | 76 | on mode change, resent on the backoff in `docs/recovery.md` until the mode is reported | param1 custom-mode flag, param2 PX4 main mode, param3 PX4 sub-mode, `confirmation` counts resends | `SwitchCommand::Mode`. Idle sends nothing. |
 | `COMMAND_LONG` with `MAV_CMD_NAV_RETURN_TO_LAUNCH` (20) | 76 | fallback only | no params | `DO_SET_MODE` denied, unsupported, or used up. |
 | `COMMAND_LONG` with `MAV_CMD_NAV_LAND` (21) | 76 | last fallback | params 4 to 7 NaN: here, heading unchanged | Every fallback order ends on it. |
-| `SET_POSITION_TARGET_LOCAL_NED` | 84 | tick rate | north, east, down in meters | `SwitchCommand::Setpoints`. |
+| `SET_POSITION_TARGET_LOCAL_NED` | 84 | tick rate | north, east, down in meters, yaw in radians | `SwitchCommand::Setpoints`. Position and yaw only: `type_mask` `0x09F8`. See "Addressing and setpoint encoding". |
 | `STATUSTEXT` | 253 | on indication change | text, 50 chars | The indication. It does not change the record. |
+
+## Addressing and setpoint encoding
+
+Every `COMMAND_LONG` and `SET_POSITION_TARGET_LOCAL_NED` goes to the system and component in the header of the last heard flight-controller `HEARTBEAT` (autopilot not `MAV_AUTOPILOT_INVALID`). Nothing is hard-coded, and the companion's own `link.system_id` is never a target. Until a flight controller is heard, nothing is sent and the tick logs `no_fc`.
+
+`SET_POSITION_TARGET_LOCAL_NED` carries:
+
+- `coordinate_frame`: `MAV_FRAME_LOCAL_NED`.
+- `x`, `y`, `z`: the request's north, east, down in meters.
+- `yaw`: the request's yaw in radians, passed through.
+- `type_mask`: `0x09F8`. Velocity (8, 16, 32), acceleration (64, 128, 256), and yaw rate (2048) are ignored. Position (1, 2, 4) and yaw (1024) are used. `FORCE_SET` (512) is clear.
+- `time_boot_ms`: the companion's monotonic run clock in milliseconds, wrapping at 2^32. It is not the flight controller's boot time.
+
+A request whose position or yaw is not finite as `f32` is not sent. The tick logs `bad_setpoint`. The gap in the offboard stream is the flight controller's offboard-loss failsafe to handle.
+
+A `COMMAND_ACK` counts only when its header system and component are the flight controller's.
 
 ## Messages the adapter reads
 
@@ -24,7 +40,7 @@ This is the contract for the one link the adapter owns. There is no second socke
 | `LOCAL_POSITION_NED` | 32 | Runtime loop fix: north `x` and east `y` in meters for the host fence, altitude `-z`. Resets `fix_age_ms` when all three are finite. |
 | `STATUSTEXT` | 253 | Logged. Does not change the record or the verdict. |
 | `SYS_STATUS` | 1 | Logged. Not a predicate. Battery and estimator fields are not read. |
-| `COMMAND_ACK` | 77 | Read from the raw payload, so `IN_PROGRESS` (5) is kept. From the flight controller's system id only. Drives the recovery latch per `docs/recovery.md`. Never confirms a mode; only `HEARTBEAT` does. |
+| `COMMAND_ACK` | 77 | Read from the raw payload, so `IN_PROGRESS` (5) is kept. From the flight controller's system and component only. Drives the recovery latch per `docs/recovery.md`. Never confirms a mode; only `HEARTBEAT` does. |
 
 An unknown inbound message is dropped. It does not change an age. A `HEARTBEAT` whose autopilot is `MAV_AUTOPILOT_INVALID` is a ground station or another companion. It does not reset `fc_heartbeat_age_ms` or the reported mode.
 
