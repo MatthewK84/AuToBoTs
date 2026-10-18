@@ -10,3 +10,5 @@ Shutdown is stop setpoints, send the recovery mode, flush the log, then exit. Th
 | Shutdown | stop setpoints, recovery mode, flush log, exit |
 
 A spec load error is the acceptance case. The link stays unconstructed.
+
+`rta-host` follows this order in `main.rs` and `runtime::run`. SIGINT or `--ticks N` starts the shutdown order. The loop is in `docs/runtime.md`.

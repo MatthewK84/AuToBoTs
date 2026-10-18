@@ -36,12 +36,7 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    if let Err(err) = open(
-        &endpoint,
-        config.link.system_id,
-        config.link.component_id,
-        &mut |_address, _system, _component| {},
-    ) {
+    if let Err(err) = open(&endpoint, std::time::Duration::from_millis(20)) {
         eprintln!("sitl: {err:?}");
         return ExitCode::from(1);
     }

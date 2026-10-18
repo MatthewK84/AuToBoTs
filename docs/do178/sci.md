@@ -11,7 +11,7 @@ This is a configuration index. It names hashes, not floating branch tips. It is 
 | Switch crate last change | `802feaa2f982b53f46f237e78804e47a4c014aff` |
 | Config `config/example.toml` | `518d4494221123a1cc9e8069fcc7c618ec090759e719cde79478938f68406622` |
 | Rust toolchain | `1.98.1` |
-| `Cargo.lock` | `027980cfa3172e81caf11d75f9a5a73d262fd5a698118d2aa4ff9363215e1e26` |
+| `Cargo.lock` | `b9f7bf855f2a02f3471b045294dea211bb8af4ca95d1ed1895a9aa99a0b26804` |
 | Runner image | `ubuntu-latest`, floating. Gap. |
 | `rtlola-interpreter` | `0.11.0` |
 | `rtlola-frontend` | `0.8.0` |

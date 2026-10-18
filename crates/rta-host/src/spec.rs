@@ -101,6 +101,7 @@ mod tests {
             include_str!("config.rs"),
             include_str!("fence.rs"),
             include_str!("stale.rs"),
+            include_str!("runtime.rs"),
         ]
         .concat();
         for literal in ["500.0", "300.0", "1000.0", "0.40", "150.0"] {
