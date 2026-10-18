@@ -1,6 +1,6 @@
 # Spec notes
 
-Thresholds live in `spec/monitor.lola` and in this file. A change edits both. The host has no copy.
+Thresholds live in `spec/monitor.lola` and in this file. A change edits both. The host has no copy. Where the host checks a threshold itself, it reads the number from the loaded spec at startup (`spec::limits`). Today that is `heartbeat_stale`, which `FailClosed` also checks. A spec whose stream is not a plain `input > number` comparison stops startup before the link.
 
 | Stream | Hazard | Units | Threshold | Why |
 | --- | --- | --- | --- | --- |

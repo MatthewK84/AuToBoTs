@@ -109,3 +109,34 @@ fn sigint_stops_the_loop_and_flushes_the_log() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_spec_without_a_readable_heartbeat_limit_exits_before_the_log() {
+    let dir = scratch("limits");
+    let real = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../spec/monitor.lola");
+    let spec = std::fs::read_to_string(&real).unwrap();
+    let line = spec
+        .lines()
+        .find(|line| line.starts_with("output heartbeat_stale:"))
+        .unwrap();
+    // Still a valid spec for the monitor, but not a plain `input > number` comparison.
+    let changed = spec.replace(
+        line,
+        "output heartbeat_stale: Bool := fc_heartbeat_age_ms >= 1.0",
+    );
+    let spec_path = dir.join("monitor.lola");
+    std::fs::write(&spec_path, changed).unwrap();
+    let config = write_config(&dir, "udp:127.0.0.1:1");
+    let text = std::fs::read_to_string(&config)
+        .unwrap()
+        .replace(real.to_str().unwrap(), spec_path.to_str().unwrap());
+    std::fs::write(&config, text).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_rta-host"))
+        .arg(&config)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("heartbeat_stale"));
+    assert!(!dir.join("rta.log").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
