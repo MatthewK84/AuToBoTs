@@ -6,6 +6,7 @@
 //! Top-level modules are the evidence tables and their checks. `host` holds the checks that
 //! name a flight module of `rta-host`, one file per module.
 
+pub mod ci;
 pub mod claims;
 pub mod common_mode;
 pub mod coverage_gate;

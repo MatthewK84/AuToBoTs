@@ -2,6 +2,7 @@
 name = "rta-docs"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.98.1"
 description = "Document and source-text checks. Not flight code: no binary links it."
 license = "Apache-2.0"
 publish = false

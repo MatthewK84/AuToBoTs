@@ -5,22 +5,74 @@ on:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+# Every job reads the repository and nothing else unless it says so (docs/ci.md).
+permissions:
+  contents: read
+# Every action is pinned to a full commit SHA. The comment names the release it was taken
+# from; update the SHA and the comment together.
 jobs:
   compile:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.98.1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@18f0487477426dce244608110aa2660c2893deb7 # 1.98.1
         with:
           components: rustfmt, clippy
       - run: cargo fmt --check
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace
       - run: cargo run --locked -q -p rta-host --bin rta-replay -- crates/rta-host/fixtures/golden spec/monitor.lola
+
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@18f0487477426dce244608110aa2660c2893deb7 # 1.98.1
+      # The flight build: release profile, panic = "abort" (docs/panics.md).
+      - run: cargo build --locked --release --workspace
+
+  aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@18f0487477426dce244608110aa2660c2893deb7 # 1.98.1
+        with:
+          targets: aarch64-unknown-linux-gnu
+      # libc6-dev-arm64-cross holds the target glibc and crt files (Scrt1.o). It is only a
+      # Recommends of the cross gcc, so --no-install-recommends needs it named.
+      - name: Install the aarch64 linker and target libc
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+      # The Jetson target triple. A cross-build check, not a run on the board (docs/target.md).
+      - name: Cross-build the release binaries for aarch64
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --locked --release --workspace --target aarch64-unknown-linux-gnu
+
+  sitl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@18f0487477426dce244608110aa2660c2893deb7 # 1.98.1
+      # The stand-in peer, not PX4: PX4_DIR is unset on the runner (docs/sitl.md).
+      - name: SITL trips against the stand-in
+        run: bash scripts/sitl-trips.sh
+      - name: SITL nominal hover against the stand-in
+        run: bash scripts/sitl.sh
+
   evidence:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Require SBOM and provenance on tags
         run: |
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
@@ -32,26 +84,34 @@ jobs:
   deny:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
 
+  # Closes the issue named by an `Issue: #N` line in the commit that landed on main, after
+  # compile, deny, and evidence pass. Its token can write issues and read the repository;
+  # nothing else. Whether to keep it at all is an owner decision (docs/ci.md).
   close-named-issue:
     needs: [compile, deny, evidence]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Close the issue named in the commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           msg=$(git log -1 --format=%B)
-          num=$(printf '%s\n' "$msg" | sed -n 's/.*Issue: #\?\([0-9][0-9]*\).*/\1/p' | head -n 1)
+          num=$(printf '%s\n' "$msg" | sed -n 's/^Issue: #\?\([0-9][0-9]*\)[[:space:]]*$/\1/p' | head -n 1)
           if [ -z "$num" ]; then
             echo "no Issue: line; nothing to close"
             exit 0
@@ -61,9 +121,12 @@ jobs:
   fuzz-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       # cargo-fuzz needs nightly. A dated nightly, so the job is the same from run to run.
-      - uses: dtolnay/rust-toolchain@master
+      # The `+toolchain` on each command leaves the pinned rust-toolchain.toml alone.
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, input-driven
         with:
           toolchain: nightly-2026-10-18
       - run: cargo +nightly-2026-10-18 install cargo-fuzz --version 0.13.2 --locked
@@ -79,12 +142,14 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.98.1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@18f0487477426dce244608110aa2660c2893deb7 # 1.98.1
         with:
           components: llvm-tools-preview
       - run: bash scripts/coverage.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: switch-coverage
           path: target/coverage/
