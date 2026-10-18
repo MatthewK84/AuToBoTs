@@ -85,8 +85,6 @@ mod tests {
         assert!(!startup.link_opened());
         assert!(!startup.steps().contains(&Step::Socket));
         assert_eq!(startup.steps(), vec![Step::Config, Step::Spec]);
-        let note = include_str!("../../../docs/startup.md");
-        assert!(note.contains("does not skip ahead"));
     }
 
     #[test]

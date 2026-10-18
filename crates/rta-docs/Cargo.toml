@@ -1,0 +1,12 @@
+[package]
+name = "rta-docs"
+version = "0.1.0"
+edition = "2021"
+description = "Document and source-text checks. Not flight code: no binary links it."
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+sha2 = { version = "0.10", default-features = false }
+rta-host = { path = "../rta-host", version = "0.1.0" }
+rta-spec = { path = "../rta-spec", version = "0.1.0" }

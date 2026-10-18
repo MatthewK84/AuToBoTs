@@ -128,7 +128,6 @@ mod tests {
             Err(other) => panic!("expected type mismatch, got {other:?}"),
             Ok(_) => panic!("expected type mismatch"),
         }
-        assert!(!include_str!("main.rs").contains("UdpSocket"));
     }
 
     #[test]

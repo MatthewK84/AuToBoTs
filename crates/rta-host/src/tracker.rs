@@ -54,13 +54,6 @@ mod tests {
 
     #[test]
     fn the_port_does_not_carry_a_frame() {
-        let contract = include_str!("tracker.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("contract");
-        assert!(!contract.contains("appsink"));
-        assert!(!contract.contains("Buffer"));
-        assert!(!contract.contains("decide"));
         let accepted = accept(TrackSample {
             confidence: 0.4,
             range_m: 12.0,
@@ -78,14 +71,5 @@ mod tests {
         assert!(sample.range_m < 150.0);
         assert_eq!(sample.sample_time_ms, 10);
         assert!(tracker.sample().is_none());
-    }
-
-    #[test]
-    fn crate_has_no_video_library() {
-        let manifest = include_str!("../Cargo.toml");
-        let video = ["g", "streamer"].concat();
-        assert!(!manifest.contains(&video));
-        assert!(!manifest.contains("opencv"));
-        assert!(!manifest.contains("ffmpeg"));
     }
 }

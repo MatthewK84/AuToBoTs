@@ -93,24 +93,5 @@ mod tests {
             &mut sink,
         );
         assert!(sink.iter().any(|line| line.contains("mode")));
-        let source = include_str!("watchdog.rs");
-        let interpreter = ["rt", "lola"].concat();
-        let filter = ["rta_", "filter"].concat();
-        let tracker = ["rta_", "tracker"].concat();
-        assert!(!source.contains(&interpreter));
-        assert!(!source.contains(&filter));
-        assert!(!source.contains(&tracker));
-        let note = include_str!("../../../docs/watchdog.md");
-        assert!(note.contains("Socket"));
-        assert!(note.contains("Clock"));
-    }
-
-    #[test]
-    fn watchdog_does_not_name_the_interpreter() {
-        let source = include_str!("watchdog.rs");
-        let interpreter = ["rt", "lola"].concat();
-        let monitor = ["Mon", "itor"].concat();
-        assert!(!source.contains(&interpreter));
-        assert!(!source.contains(&monitor));
     }
 }

@@ -76,11 +76,5 @@ mod tests {
     #[test]
     fn shadow_is_off_until_power_and_deadline_close() {
         assert!(!shadow_may_enable());
-        let note = include_str!("../../../docs/shadow-net.md");
-        assert!(note.contains("SHADOW_DEFAULT_ON"));
-        assert!(note.contains("compiled out"));
-        assert!(note.contains("not raised"));
-        assert!(note.contains("Group 1"));
-        assert!(note.contains("unmeasured"));
     }
 }

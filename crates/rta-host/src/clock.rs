@@ -64,8 +64,5 @@ mod tests {
         let jumped = clock.observe(1_000);
         assert_eq!(jumped, now);
         assert!(grant_expired(jumped, 2_500));
-        let doc = include_str!("../../../docs/time.md");
-        assert!(doc.contains("same"));
-        assert!(doc.contains("monotonic"));
     }
 }

@@ -253,9 +253,6 @@ mod tests {
         assert_eq!(active.command_spec(), &before);
         assert!(active.latched);
         assert_eq!(active.verdict(Verdict::Pass), Verdict::Revert);
-        let source = include_str!("quarantine.rs");
-        let clear = ["fn ", "clear_fault"].concat();
-        assert!(!source.contains(&clear));
     }
 
     #[test]

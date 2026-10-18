@@ -9,6 +9,8 @@ Pinned on Rust 1.98.1. Exact crate versions. Checksums are the crates.io checksu
 | mavlink | 0.18.0 | ef539c358c31f69d47816dac709eebbcb733166ae1bcdeeb4463383c042e3e7c | rta-host only |
 | ctrlc | 3.5.2 | e0b1fab2ae45819af2d0731d60f2afe17227ebb1a1538a236da84c93e9a60162 | rta-host only, SIGINT for the shutdown order |
 | kani-verifier | 0.68.0 | not in the default lock | rta-switch, feature `verify` only |
+| proptest | 1.12.0 | b8530004ccb15eae51c7e40009fbe317f341f804db54dc033eec1c50be28cfa0 | rta-host dev-dependency only, default features off (no fork, no failure files) |
+| libfuzzer-sys | 0.4.13 | a9fd2f41a1cba099f79a0b6b6c35656cf7c03351a7bae8ff0f28f25270f929d2, in `fuzz/Cargo.lock`, not the default lock | `fuzz/` only, nightly |
 
 Dialect is `common` only. Default features are off, so `dialect-ardupilotmega` is not linked. M9 names PX4 SITL as the default harness, and the common dialect is the PX4 message set. ArduPilot would be a separate pin, not a second feature on this crate.
 

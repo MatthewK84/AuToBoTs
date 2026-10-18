@@ -181,6 +181,22 @@ mod tests {
         ] {
             assert_eq!(parse_endpoint(text), Err(LinkError::BadEndpoint), "{text}");
         }
+        // Well-formed but unopenable: serial is not built, and a held port is not taken over.
+        let serial = parse_endpoint("serial:/dev/ttyTHS1:921600").unwrap();
+        assert_eq!(open(&serial, WAIT).unwrap_err(), LinkError::SerialNotBuilt);
+        let holder = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let held = holder.local_addr().unwrap();
+        let busy = parse_endpoint(&format!("udpin:127.0.0.1:{}", held.port())).unwrap();
+        assert!(matches!(open(&busy, WAIT), Err(LinkError::Io(_))));
+        // The holder still owns the port: a datagram to it arrives there.
+        let probe = UdpSocket::bind("127.0.0.1:0").unwrap();
+        probe.send_to(b"x", held).unwrap();
+        holder.set_read_timeout(Some(WAIT)).unwrap();
+        let mut byte = [0u8; 1];
+        assert_eq!(
+            holder.recv_from(&mut byte).unwrap().1,
+            probe.local_addr().unwrap()
+        );
     }
 
     #[test]

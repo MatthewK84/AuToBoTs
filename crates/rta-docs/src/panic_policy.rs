@@ -16,12 +16,24 @@ mod tests {
     #[test]
     fn the_library_and_every_binary_deny_panics_outside_tests() {
         let sources = [
-            ("lib.rs", include_str!("lib.rs")),
-            ("main.rs", include_str!("main.rs")),
-            ("rta-replay.rs", include_str!("bin/rta-replay.rs")),
-            ("rta-sitl.rs", include_str!("bin/rta-sitl.rs")),
-            ("rta-target.rs", include_str!("bin/rta-target.rs")),
-            ("rta-trips.rs", include_str!("bin/rta-trips.rs")),
+            ("lib.rs", include_str!("../../rta-host/src/lib.rs")),
+            ("main.rs", include_str!("../../rta-host/src/main.rs")),
+            (
+                "rta-replay.rs",
+                include_str!("../../rta-host/src/bin/rta-replay.rs"),
+            ),
+            (
+                "rta-sitl.rs",
+                include_str!("../../rta-host/src/bin/rta-sitl.rs"),
+            ),
+            (
+                "rta-target.rs",
+                include_str!("../../rta-host/src/bin/rta-target.rs"),
+            ),
+            (
+                "rta-trips.rs",
+                include_str!("../../rta-host/src/bin/rta-trips.rs"),
+            ),
         ];
         for (name, source) in sources {
             assert!(
@@ -32,7 +44,7 @@ mod tests {
                 assert!(source.contains(lint), "{name}: {lint}");
             }
         }
-        let bins = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bin"))
+        let bins = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../rta-host/src/bin"))
             .unwrap()
             .count();
         assert_eq!(bins, sources.len() - 2, "a new binary needs the deny block");

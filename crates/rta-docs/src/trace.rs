@@ -120,15 +120,15 @@ pub const TRACE: &[TraceRow] = &[
 ];
 
 const SOURCES: &[&str] = &[
-    include_str!("fence.rs"),
-    include_str!("mavlink_link.rs"),
-    include_str!("link_age.rs"),
-    include_str!("fail_closed.rs"),
-    include_str!("tracker.rs"),
+    include_str!("../../rta-host/src/fence.rs"),
+    include_str!("../../rta-host/src/mavlink_link.rs"),
+    include_str!("../../rta-host/src/link_age.rs"),
+    include_str!("../../rta-host/src/fail_closed.rs"),
+    include_str!("../../rta-host/src/tracker.rs"),
     include_str!("../../rta-spec/src/lib.rs"),
     include_str!("../../rta-switch/src/verify.rs"),
-    include_str!("bundle.rs"),
-    include_str!("quarantine.rs"),
+    include_str!("../../rta-host/src/bundle.rs"),
+    include_str!("../../rta-host/src/quarantine.rs"),
 ];
 
 /// Hazards with no `trace: Hn` tag next to the named test. A non-empty result fails CI.

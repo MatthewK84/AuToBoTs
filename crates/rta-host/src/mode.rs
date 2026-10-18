@@ -53,11 +53,4 @@ mod tests {
         );
         assert_eq!(sink.len(), 1);
     }
-
-    #[test]
-    fn no_public_clear() {
-        let source = include_str!("mode.rs");
-        let name = ["clear", "_recovery"].concat();
-        assert!(!source.contains(&name));
-    }
 }

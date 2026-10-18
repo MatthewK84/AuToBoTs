@@ -48,7 +48,7 @@ mod tests {
     #[test]
     fn the_icd_names_the_setpoint_encoding_and_the_heard_target() {
         let icd = include_str!("../../../docs/icd-fc.md");
-        let mask = crate::command_out::POSITION_AND_YAW.bits();
+        let mask = rta_host::command_out::POSITION_AND_YAW.bits();
         assert!(icd.contains(&format!("`0x{mask:04X}`")), "{mask:#06X}");
         for item in [
             "yaw in radians",
@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn the_icd_mode_table_matches_the_px4_encoding() {
-        use crate::command_out::{custom_mode, px4_mode};
+        use rta_host::command_out::{custom_mode, px4_mode};
         use rta_spec::RecoveryMode;
         let icd = include_str!("../../../docs/icd-fc.md");
         for (mode, name) in [

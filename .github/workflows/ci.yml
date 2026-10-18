@@ -58,6 +58,24 @@ jobs:
           fi
           gh issue close "$num" --repo "$GITHUB_REPOSITORY" --reason completed --comment "Closed after CI passed on ${GITHUB_SHA}."
 
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # cargo-fuzz needs nightly. A dated nightly, so the job is the same from run to run.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-10-18
+      - run: cargo +nightly-2026-10-18 install cargo-fuzz --version 0.13.2 --locked
+      - name: Run each fuzz target for a fixed count on a fixed seed
+        run: |
+          set -eu
+          for target in read_apply mavlink_frames config_parse; do
+            scratch=$(mktemp -d)
+            cp fuzz/corpus/"$target"/* "$scratch"/
+            cargo +nightly-2026-10-18 fuzz run "$target" "$scratch" -- -runs=200000 -seed=1
+          done
+
   coverage:
     runs-on: ubuntu-latest
     steps:

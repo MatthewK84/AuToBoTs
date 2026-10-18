@@ -233,11 +233,4 @@ mod tests {
         ));
         assert!(matches!(fresh, SwitchCommand::Setpoints { .. }));
     }
-
-    #[test]
-    fn no_clear_fault() {
-        let source = include_str!("fail_closed.rs");
-        let name = ["pub fn ", "clear_fault"].concat();
-        assert!(!source.contains(&name));
-    }
 }

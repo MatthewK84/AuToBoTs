@@ -6,15 +6,15 @@ mod tests {
     fn every_hazard_has_both_columns_and_the_control_exists() {
         let method = include_str!("../../../docs/safety-method.md");
         let sources = [
-            include_str!("fence.rs"),
-            include_str!("mavlink_link.rs"),
-            include_str!("link_age.rs"),
-            include_str!("fail_closed.rs"),
-            include_str!("tracker.rs"),
+            include_str!("../../rta-host/src/fence.rs"),
+            include_str!("../../rta-host/src/mavlink_link.rs"),
+            include_str!("../../rta-host/src/link_age.rs"),
+            include_str!("../../rta-host/src/fail_closed.rs"),
+            include_str!("../../rta-host/src/tracker.rs"),
             include_str!("../../rta-spec/src/lib.rs"),
             include_str!("../../rta-switch/src/verify.rs"),
-            include_str!("bundle.rs"),
-            include_str!("quarantine.rs"),
+            include_str!("../../rta-host/src/bundle.rs"),
+            include_str!("../../rta-host/src/quarantine.rs"),
             include_str!("../../../spec/monitor.lola"),
         ];
         let joined = sources.join("\n");
