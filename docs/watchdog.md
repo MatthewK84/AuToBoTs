@@ -13,4 +13,6 @@ It still shares two things with the eval path.
 
 The runtime runs it on its own thread, `rta-watchdog`, in `crates/rta-host/src/runtime.rs`. It sends on its own clone of the socket handle with its own frame buffer and sequence. It does not wait for the tick thread. It claims the same send-once recovery flag as the tick thread, so the mode goes out once.
 
+A hung evaluator no longer stalls the tick thread; the deadline in `docs/deadline.md` reverts it inside one tick. The watchdog stays the backstop for a tick thread that stalls anywhere else.
+
 A killed eval thread leaves the last published tick where it was. The watchdog fires from that tick. It does not need the interpreter to be running.

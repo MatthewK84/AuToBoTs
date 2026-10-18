@@ -6,8 +6,9 @@
 
 | Thread | Does | Does not |
 | --- | --- | --- |
-| Tick | Ages samples, builds the `InputRecord` with `try_new`, evaluates the spec, passes the verdict through `FailClosed` and `decide`, sends the outbound message, writes the tick log, publishes the tick. Sends the companion `HEARTBEAT` at 1 Hz. | Read the socket. |
+| Tick | Ages samples, builds the `InputRecord` with `try_new`, hands it to the evaluation worker and waits at most `tick.deadline_ms`, passes the verdict through `FailClosed` and `decide`, sends the outbound message, writes the tick log, publishes the tick. Sends the companion `HEARTBEAT` at 1 Hz. | Read the socket. |
 | Receive | Reads datagrams with a 20 ms timeout and applies each MAVLink frame to the shared vehicle state with local receive time. | Call the interpreter or send. |
+| Evaluation | Owns the RTLola monitor, built once at startup. Evaluates one record per request. Detail in `docs/deadline.md`. | Send, or hold any lock the tick thread takes. |
 | Watchdog | Reads the published tick. After `tick.watchdog_misses` missed periods it sends the recovery mode on its own socket handle. | Call the interpreter, the filter, or the tracker. Wait for the tick thread. |
 
 The vehicle state is fixed size. A status text changes no field. The three threads share one monotonic clock that starts with the run.
@@ -18,8 +19,8 @@ The vehicle state is fixed size. A status text changes no field. The three threa
 2. `fence_ok` is the host fence on the `LOCAL_POSITION_NED` north and east, with altitude `-z`. No fix is `fence_ok = false`. `source = "fc"` is `fence_ok = false` in the host record.
 3. No tracker is wired. Track confidence is zero at range zero, which is the lost-tracker inhibit in `docs/degraded.md`.
 4. A record that `try_new` rejects is no verdict. `FailClosed` makes no verdict Revert.
-5. A late eval is Revert. The deadline is measured after eval returns; it is not preemptive.
-6. A sent recovery mode or a failed log write latches Revert until restart. The log line carries `latched`.
+5. The deadline is preemptive. The tick thread waits at most `tick.deadline_ms` for the evaluation worker and does not wait for a hung evaluator. A missed deadline, a busy worker, or a dead worker is Revert and latches as an evaluation fault until restart; the line carries `late` or `eval_fault`.
+6. A sent recovery mode, a failed log write, or an evaluation fault latches Revert until restart. The log line carries `latched`.
 7. `decide` is the only constructor of the command. `command_out` encodes it.
 8. Nothing is sent before the first flight-controller `HEARTBEAT`. The line carries `no_fc`.
 9. A `Setpoints` command with no complex-function request is not forwarded. The switch fills a missing request with zeros, and a zero setpoint is a real position. The line carries `no_request`.
@@ -35,7 +36,7 @@ Recovery is sent once per process. The tick thread and the watchdog claim the sa
 
 ## Shutdown
 
-SIGINT or `--ticks N` ends the loop. The order is stop setpoints, send the recovery mode unless the flight controller already reports it or it was already sent, flush the log, join the receive and watchdog threads, exit 0.
+SIGINT or `--ticks N` ends the loop. The order is stop setpoints, send the recovery mode unless the flight controller already reports it or it was already sent, flush the log, stop the evaluation worker, join the receive and watchdog threads, exit 0. A faulted worker may be hung, so it is detached, not joined.
 
 ## Endpoints
 
