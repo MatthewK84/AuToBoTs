@@ -17,6 +17,7 @@ pub mod bundle;
 pub mod clock;
 pub mod command_out;
 pub mod config;
+pub mod diag;
 pub mod eval;
 pub mod eval_worker;
 pub mod event;

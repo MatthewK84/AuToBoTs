@@ -61,7 +61,7 @@ fn bad_config_exits_before_a_socket_and_writes_no_log() {
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(1), "{output:?}");
-    assert!(String::from_utf8_lossy(&output.stderr).contains("config:"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("level=error component=config msg="));
     assert!(!dir.join("rta.log").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -99,7 +99,8 @@ fn sigint_stops_the_loop_and_flushes_the_log() {
     assert!(killed.success());
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success(), "{output:?}");
-    assert!(String::from_utf8_lossy(&output.stdout).contains("rta-host: stopped after"));
+    assert!(String::from_utf8_lossy(&output.stdout)
+        .contains("level=info component=runtime msg=\"stopped after"));
     let text = std::fs::read_to_string(&log).unwrap();
     assert!(
         text.lines()

@@ -11,6 +11,8 @@ pub mod claims;
 pub mod common_mode;
 pub mod coverage_gate;
 pub mod degraded;
+#[cfg(test)]
+mod hygiene;
 pub mod icd_fc;
 pub mod jsf;
 pub mod learning_hazards;
