@@ -8,7 +8,7 @@ Append-only. One header, then one record per tick. The host opens this file befo
 # rta-log 1 spec_hash=<16 hex digits>
 ```
 
-Version is `1`. `spec_hash` is a non-cryptographic hash of the spec file bytes.
+Current version is `1`. `rta-replay` rejects any other version instead of guessing fields. Adding an input field is a version bump.
 
 ## Record
 

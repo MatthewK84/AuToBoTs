@@ -2,7 +2,7 @@
 
 use crate::eval::Evaluator;
 use crate::monitor::build_once;
-use crate::tick_log::TickRecord;
+use crate::tick_log::{TickRecord, VERSION};
 use rta_spec::{InputRecord, Verdict};
 use std::path::Path;
 
@@ -14,7 +14,24 @@ pub struct Mismatch {
     pub record: String,
 }
 
+pub fn header_version(log: &str) -> Result<u32, Mismatch> {
+    let header = log
+        .lines()
+        .find(|line| line.starts_with("# rta-log"))
+        .ok_or_else(|| mismatch(0, "header", "missing", ""))?;
+    let version: u32 = header
+        .split_whitespace()
+        .nth(2)
+        .and_then(|token| token.parse().ok())
+        .ok_or_else(|| mismatch(0, "version", "missing", header))?;
+    if version != VERSION {
+        return Err(mismatch(0, "version", &version.to_string(), header));
+    }
+    Ok(version)
+}
+
 pub fn check(log: &str, spec: &str) -> Result<(), Mismatch> {
+    header_version(log)?;
     let mut monitor = build_once(spec).map_err(|_| mismatch(0, "build", "fault", log))?;
     let mut evaluator = Evaluator::default();
     for line in log.lines().filter(|line| line.starts_with("tick=")) {
@@ -163,6 +180,17 @@ fn verdict_name(verdict: Verdict) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn wrong_version_is_rejected_and_exits_nonzero() {
+        let log = include_str!("../fixtures/wrong-version.log");
+        let err = super::header_version(log).unwrap_err();
+        assert_eq!(err.expected, "version");
+        let format = include_str!("../../../docs/log-format.md");
+        assert!(format.contains("Current version is `1`"));
+        let main = include_str!("bin/rta-replay.rs");
+        assert!(main.contains("ExitCode::from(1)"));
+    }
+
     use super::*;
 
     fn spec() -> String {
