@@ -8,7 +8,7 @@ Two workflows: `.github/workflows/ci.yml` on every push and pull request, and `.
 | --- | --- | --- |
 | `compile` | `cargo fmt --check`, clippy `-D warnings` on all targets, `cargo test --locked --workspace` (document checks included), golden replay | 1.98.1 |
 | `release` | `cargo build --locked --release --workspace`: the flight profile, `panic = "abort"` | 1.98.1 |
-| `aarch64` | The same release build for `aarch64-unknown-linux-gnu`, the Jetson triple, linked with `gcc-aarch64-linux-gnu`. A cross-build check, not a run on the board | 1.98.1 |
+| `aarch64` | The same release build for `aarch64-unknown-linux-gnu`, the Jetson triple, linked with `gcc-aarch64-linux-gnu` against `libc6-dev-arm64-cross`. A cross-build check, not a run on the board | 1.98.1 |
 | `sitl` | `scripts/sitl-trips.sh` and `scripts/sitl.sh` against the stand-in peer. `PX4_DIR` is unset, so no PX4 binary runs | 1.98.1 |
 | `deny` | `cargo deny check` | action's own |
 | `coverage` | `scripts/coverage.sh`, the switch coverage gate | 1.98.1 |
