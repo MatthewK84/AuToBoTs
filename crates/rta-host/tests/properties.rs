@@ -69,10 +69,7 @@ fn ack_frame(command: MavCmd, result: MavResult, system: u8, component: u8) -> V
         component_id: component,
         sequence: 0,
     };
-    let message = MavMessage::COMMAND_ACK(COMMAND_ACK_DATA {
-        command,
-        result,
-    });
+    let message = MavMessage::COMMAND_ACK(COMMAND_ACK_DATA { command, result });
     let mut buffer = [0u8; mavlink_link::MAX_FRAME];
     let length = mavlink_link::encode(header, &message, &mut buffer).unwrap();
     buffer[..length].to_vec()
