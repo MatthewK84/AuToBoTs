@@ -39,6 +39,12 @@ pub const MATRIX: &[Row] = &[
         commit: false,
         recovery: true,
     },
+    Row {
+        name: "Recovery unconfirmed",
+        navigation: false,
+        commit: false,
+        recovery: true,
+    },
 ];
 
 #[cfg(test)]
@@ -56,5 +62,20 @@ mod tests {
         assert!(verdicts.contains("inhibit_clears_commit"));
         assert!(verdicts.contains("revert_has_no_commit_field"));
         assert!(doc.contains("never allowed"));
+    }
+
+    #[test]
+    fn the_matrix_defines_a_vehicle_that_never_confirms_recovery() {
+        let doc = include_str!("../../../docs/degraded.md");
+        for item in [
+            "| Recovery unconfirmed | not allowed | not allowed | commanded until the order is used up |",
+            "never confirms the recovery mode",
+            "stops sending and Revert stays latched until restart",
+            "offboard-loss failsafe",
+            "`recovery_unconfirmed`",
+            "docs/recovery.md",
+        ] {
+            assert!(doc.contains(item), "{item}");
+        }
     }
 }

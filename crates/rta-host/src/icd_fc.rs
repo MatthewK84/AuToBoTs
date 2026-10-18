@@ -15,6 +15,7 @@ pub const READ: &[(&str, u32)] = &[
     ("LOCAL_POSITION_NED", 32),
     ("STATUSTEXT", 253),
     ("SYS_STATUS", 1),
+    ("COMMAND_ACK", 77),
 ];
 
 #[cfg(test)]
@@ -34,6 +35,14 @@ mod tests {
         assert!(icd.contains("flight controller's own failsafe"));
         assert!(icd.contains("fromOffboardLossActParam"));
         assert!(!icd.contains("the companion flies the recovery"));
+        for item in [
+            "`MAV_CMD_NAV_RETURN_TO_LAUNCH` (20)",
+            "`MAV_CMD_NAV_LAND` (21)",
+            "`IN_PROGRESS` (5)",
+            "Never confirms a mode; only `HEARTBEAT` does.",
+        ] {
+            assert!(icd.contains(item), "{item}");
+        }
     }
 
     #[test]

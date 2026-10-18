@@ -9,7 +9,9 @@ This is the contract for the one link the adapter owns. There is no second socke
 | Message | Id | Rate | Units | When |
 | --- | --- | --- | --- | --- |
 | `HEARTBEAT` | 0 | 1 Hz | none | Always. Component type is onboard controller, not a flight controller. |
-| `COMMAND_LONG` with `MAV_CMD_DO_SET_MODE` | 76 | on mode change | param1 custom-mode flag, param2 PX4 main mode, param3 PX4 sub-mode | `SwitchCommand::Mode`. Idle sends nothing. |
+| `COMMAND_LONG` with `MAV_CMD_DO_SET_MODE` | 76 | on mode change, resent on the backoff in `docs/recovery.md` until the mode is reported | param1 custom-mode flag, param2 PX4 main mode, param3 PX4 sub-mode, `confirmation` counts resends | `SwitchCommand::Mode`. Idle sends nothing. |
+| `COMMAND_LONG` with `MAV_CMD_NAV_RETURN_TO_LAUNCH` (20) | 76 | fallback only | no params | `DO_SET_MODE` denied, unsupported, or used up. |
+| `COMMAND_LONG` with `MAV_CMD_NAV_LAND` (21) | 76 | last fallback | params 4 to 7 NaN: here, heading unchanged | Every fallback order ends on it. |
 | `SET_POSITION_TARGET_LOCAL_NED` | 84 | tick rate | north, east, down in meters | `SwitchCommand::Setpoints`. |
 | `STATUSTEXT` | 253 | on indication change | text, 50 chars | The indication. It does not change the record. |
 
@@ -22,6 +24,7 @@ This is the contract for the one link the adapter owns. There is no second socke
 | `LOCAL_POSITION_NED` | 32 | Runtime loop fix: north `x` and east `y` in meters for the host fence, altitude `-z`. Resets `fix_age_ms` when all three are finite. |
 | `STATUSTEXT` | 253 | Logged. Does not change the record or the verdict. |
 | `SYS_STATUS` | 1 | Logged. Not a predicate. Battery and estimator fields are not read. |
+| `COMMAND_ACK` | 77 | Read from the raw payload, so `IN_PROGRESS` (5) is kept. From the flight controller's system id only. Drives the recovery latch per `docs/recovery.md`. Never confirms a mode; only `HEARTBEAT` does. |
 
 An unknown inbound message is dropped. It does not change an age. A `HEARTBEAT` whose autopilot is `MAV_AUTOPILOT_INVALID` is a ground station or another companion. It does not reset `fc_heartbeat_age_ms` or the reported mode.
 

@@ -2,8 +2,9 @@
 //!
 //! The tick thread ages samples, builds the record, evaluates the spec, passes the verdict
 //! through `FailClosed` and `decide`, sends the outbound message, and writes the tick log.
-//! The receive thread applies inbound MAVLink to the shared vehicle state. The watchdog thread
-//! reads the published tick only and sends the recovery mode on its own socket handle.
+//! The receive thread applies inbound MAVLink to the shared vehicle state and hands each
+//! `COMMAND_ACK` to the recovery latch. The watchdog thread reads the published tick only and,
+//! while the tick thread is stalled, drives the same recovery latch on its own socket handle.
 
 use crate::clock::age_ms;
 use crate::command_out::{reported_mode, to_message};
@@ -13,8 +14,10 @@ use crate::fail_closed::{FailClosed, TickCase};
 use crate::fence::{fence_ok, FenceInput};
 use crate::link::{LinkError, UdpLink};
 use crate::link_age::{LinkAge, LinkMessage};
-use crate::mavlink_link::{decode_each, encode, heartbeat, MAX_FRAME};
-use crate::mode::ModeSender;
+use crate::mavlink_link::{
+    decode_frames, encode, heartbeat, CommandAck, Frame, MAX_FRAME, MAX_FRAMES_PER_DATAGRAM,
+};
+use crate::recovery::{AckResult, Latch, Policy, State, Step};
 use crate::stale::present_track;
 use crate::tick_log::{command_name, TickLog, TickRecord};
 use crate::watchdog::Watchdog;
@@ -148,6 +151,14 @@ pub fn present(config: &Config, vehicle: &Vehicle, now_ms: u64) -> Result<Presen
     Ok(Presented { record, fence_ok })
 }
 
+pub fn policy_of(config: &Config) -> Policy {
+    Policy {
+        initial_ms: config.recovery.retry_initial_ms,
+        cap_ms: config.recovery.retry_cap_ms,
+        attempts_per_step: config.recovery.attempts_per_step,
+    }
+}
+
 pub fn recovery_of(config: &Config) -> RecoveryMode {
     match config.recovery.mode {
         config::RecoveryMode::Rtl => RecoveryMode::Rtl,
@@ -213,8 +224,9 @@ struct Shared {
     vehicle: Mutex<Vehicle>,
     stop: Arc<AtomicBool>,
     published_ms: AtomicU64,
-    /// Recovery is sent once per process (`mode.rs`). Either thread may claim it.
-    recovery_sent: AtomicBool,
+    /// The one recovery-in-progress latch (`recovery.rs`). The tick thread and the watchdog
+    /// both drive it under this lock, so one attempt is never sent twice.
+    recovery: Mutex<Latch>,
     watchdog_fired: AtomicBool,
 }
 
@@ -223,19 +235,30 @@ impl Shared {
         *lock(&self.vehicle)
     }
 
-    /// Claim the one recovery send and put it on the wire. A local send error releases the
-    /// claim so the next tick or the watchdog can send. A lost datagram is not seen here.
-    fn send_recovery(&self, sender: &mut Sender, recovery: RecoveryMode, target: u8) -> bool {
-        if self.recovery_sent.swap(true, Ordering::SeqCst) {
-            return false;
-        }
-        let sent = to_message(&SwitchCommand::Mode { recovery }, target)
-            .map(|message| sender.send(&message).is_ok())
-            .unwrap_or(false);
-        if !sent {
-            self.recovery_sent.store(false, Ordering::SeqCst);
-        }
-        sent
+    fn recovery_engaged(&self) -> bool {
+        lock(&self.recovery).engaged()
+    }
+
+    fn engage_recovery(&self, now_ms: u64) {
+        lock(&self.recovery).engage(now_ms);
+    }
+
+    /// Send the recovery step that is due, if any, holding the latch lock across the send.
+    /// Returns the step that went on the wire. A local send error leaves the step due.
+    fn drive_recovery(
+        &self,
+        sender: &mut Sender,
+        target: u8,
+        now_ms: u64,
+        reported: Option<RecoveryMode>,
+    ) -> Option<Step> {
+        let mut latch = lock(&self.recovery);
+        let step = latch.poll(now_ms, reported)?;
+        let ok = sender
+            .send(&step.message(target, latch.confirmation()))
+            .is_ok();
+        latch.sent(now_ms, ok);
+        ok.then_some(step)
     }
 }
 
@@ -251,6 +274,8 @@ pub struct RunReport {
     pub ticks: u64,
     pub overruns: u64,
     pub recovery_sent: bool,
+    pub recovery_attempts: u32,
+    pub recovery_confirmed: bool,
     pub watchdog_fired: bool,
 }
 
@@ -281,7 +306,7 @@ pub fn run<W: Write>(
         vehicle: Mutex::new(Vehicle::default()),
         stop: Arc::clone(&options.stop),
         published_ms: AtomicU64::new(0),
-        recovery_sent: AtomicBool::new(false),
+        recovery: Mutex::new(Latch::new(recovery, policy_of(config))),
         watchdog_fired: AtomicBool::new(false),
     });
 
@@ -291,7 +316,6 @@ pub fn run<W: Write>(
         &shared,
         clock,
         config,
-        recovery,
     );
     let watchdog = match watchdog {
         Ok(handle) => handle,
@@ -348,9 +372,9 @@ pub fn run<W: Write>(
         if late {
             reasons.push("late".to_string());
         }
-        // A sent recovery, a failed log write, or an evaluation fault latches Revert until
-        // restart.
-        let latched = shared.recovery_sent.load(Ordering::SeqCst) || log_failed || worker.faulted();
+        // Recovery in progress, a failed log write, or an evaluation fault latches Revert
+        // until restart.
+        let latched = shared.recovery_engaged() || log_failed || worker.faulted();
         if latched {
             reasons.push("latched".to_string());
         }
@@ -380,9 +404,7 @@ pub fn run<W: Write>(
             reasons.push("no_fc".to_string());
         } else {
             match command {
-                SwitchCommand::Mode { recovery } => {
-                    shared.send_recovery(&mut sender, recovery, target);
-                }
+                SwitchCommand::Mode { .. } => shared.engage_recovery(now_ms),
                 SwitchCommand::Setpoints { .. } if request.is_none() => {
                     // The switch fills a missing request with zeros. A zero setpoint is a
                     // real position, so nothing is forwarded when nothing was asked.
@@ -395,7 +417,12 @@ pub fn run<W: Write>(
                 }
                 SwitchCommand::Idle => {}
             }
+            // Resends run whatever this tick decided, until the latch is confirmed or used up.
+            if let Some(step) = shared.drive_recovery(&mut sender, target, now_ms, reported) {
+                reasons.push(format!("sent:{}", step.name()));
+            }
         }
+        lock(&shared.recovery).reasons(&mut reasons);
 
         let (fence, record) = match &presented {
             Some(presented) => (presented.fence_ok, Some(&presented.record)),
@@ -439,13 +466,20 @@ pub fn run<W: Write>(
     let reported = vehicle.fc_custom_mode.and_then(reported_mode);
     if vehicle.fc_heartbeat_ms.is_some() && reported != Some(recovery) {
         let target = vehicle.fc_system.unwrap_or(config.link.system_id);
-        shared.send_recovery(&mut sender, recovery, target);
+        let now_ms = clock.now_ms();
+        shared.engage_recovery(now_ms);
+        shared.drive_recovery(&mut sender, target, now_ms, reported);
     }
     let _ = log.flush();
     worker.shutdown();
     let _ = receiver.join();
     let _ = watchdog.join();
-    report.recovery_sent = shared.recovery_sent.load(Ordering::SeqCst);
+    {
+        let latch = lock(&shared.recovery);
+        report.recovery_attempts = latch.attempts();
+        report.recovery_sent = latch.attempts() > 0;
+        report.recovery_confirmed = latch.state() == State::Confirmed;
+    }
     report.watchdog_fired = shared.watchdog_fired.load(Ordering::SeqCst);
     Ok(report)
 }
@@ -465,10 +499,32 @@ fn spawn_receiver(
                     Ok(Some(count)) => {
                         let now_ms = clock.now_ms();
                         let datagram = buffer.get(..count).unwrap_or_default();
-                        let mut vehicle = lock(&shared.vehicle);
-                        decode_each(datagram, |header, message| {
-                            apply_message(&mut vehicle, header, message, now_ms);
-                        });
+                        // Fixed room: a datagram yields at most MAX_FRAMES_PER_DATAGRAM frames.
+                        let mut acks = [None::<CommandAck>; MAX_FRAMES_PER_DATAGRAM];
+                        let mut count = 0;
+                        {
+                            let mut vehicle = lock(&shared.vehicle);
+                            decode_frames(datagram, |header, frame| match frame {
+                                Frame::Message(message) => {
+                                    apply_message(&mut vehicle, header, message, now_ms);
+                                }
+                                Frame::CommandAck(ack) => {
+                                    vehicle.link.observe(LinkMessage::Command, now_ms);
+                                    // Only the flight controller's answer counts.
+                                    if vehicle.fc_system == Some(header.system_id) {
+                                        if let Some(slot) = acks.get_mut(count) {
+                                            *slot = Some(ack);
+                                            count += 1;
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                        // The vehicle lock is released before the latch lock is taken.
+                        let mut latch = lock(&shared.recovery);
+                        for ack in acks.iter().flatten() {
+                            latch.on_ack(now_ms, ack.command, AckResult::from_raw(ack.result));
+                        }
                     }
                     Ok(None) => {}
                     Err(_) => thread::sleep(RECV_TIMEOUT),
@@ -483,7 +539,6 @@ fn spawn_watchdog(
     shared: &Arc<Shared>,
     clock: Clock,
     config: &Config,
-    recovery: RecoveryMode,
 ) -> Result<thread::JoinHandle<()>, RunError> {
     let shared = Arc::clone(shared);
     let mut dog = Watchdog::new(config.tick.period_ms, config.tick.watchdog_misses);
@@ -492,30 +547,26 @@ fn spawn_watchdog(
     thread::Builder::new()
         .name("rta-watchdog".into())
         .spawn(move || {
-            let mut sink = Vec::with_capacity(1);
             while !shared.stop.load(Ordering::SeqCst) {
                 thread::sleep(poll);
                 let now_ms = clock.now_ms();
                 dog.publish(shared.published_ms.load(Ordering::SeqCst));
                 let vehicle = shared.snapshot();
-                if vehicle.fc_heartbeat_ms.is_none() {
+                if vehicle.fc_heartbeat_ms.is_none() || !dog.stalled(now_ms) {
+                    continue;
+                }
+                // The tick thread is stalled. Engage the same latch and send what is due.
+                shared.engage_recovery(now_ms);
+                if shared.stop.load(Ordering::SeqCst) {
                     continue;
                 }
                 let reported = vehicle.fc_custom_mode.and_then(reported_mode);
-                sink.clear();
-                let mut once = ModeSender::default();
-                dog.check(
-                    now_ms,
-                    reported_or_other(reported, recovery),
-                    recovery,
-                    &mut once,
-                    &mut sink,
-                );
-                if !sink.is_empty() && !shared.stop.load(Ordering::SeqCst) {
-                    let target = vehicle.fc_system.unwrap_or(fallback_target);
-                    if shared.send_recovery(&mut sender, recovery, target) {
-                        shared.watchdog_fired.store(true, Ordering::SeqCst);
-                    }
+                let target = vehicle.fc_system.unwrap_or(fallback_target);
+                if shared
+                    .drive_recovery(&mut sender, target, now_ms, reported)
+                    .is_some()
+                {
+                    shared.watchdog_fired.store(true, Ordering::SeqCst);
                 }
             }
         })
@@ -528,9 +579,11 @@ mod tests {
     use crate::command_out::{custom_mode, PX4_MAIN_MODE_AUTO, PX4_SUB_MODE_AUTO_RTL};
     use crate::eval_worker::{Evaluate, SpecEvaluator};
     use crate::link::{open, Endpoint};
+    use crate::mavlink_link::decode_each;
     use crate::monitor::build_once;
     use mavlink::dialects::common::{
-        MavCmd, MavModeFlag, MavState, MavType, HEARTBEAT_DATA, LOCAL_POSITION_NED_DATA,
+        MavCmd, MavModeFlag, MavResult, MavState, MavType, COMMAND_ACK_DATA, HEARTBEAT_DATA,
+        LOCAL_POSITION_NED_DATA,
     };
     use rta_switch::{Request, StubComplex};
     use std::net::{SocketAddr, UdpSocket};
@@ -557,6 +610,9 @@ tracker_hold_ms = 200
 
 [recovery]
 mode = "rtl"
+retry_initial_ms = 300
+retry_cap_ms = 600
+attempts_per_step = 2
 
 [spec]
 path = "spec/monitor.lola"
@@ -587,11 +643,40 @@ a_max = 3.0
     type SetMode = (f32, f32, f32, Instant);
 
     /// What the fake flight controller saw from the host.
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, Clone)]
     struct Seen {
         set_mode: Vec<SetMode>,
+        /// `MAV_CMD_NAV_RETURN_TO_LAUNCH` and `MAV_CMD_NAV_LAND`, with arrival.
+        nav: Vec<(MavCmd, Instant)>,
         setpoints: usize,
         heartbeats: usize,
+    }
+
+    impl Seen {
+        /// Every recovery command in arrival order: the command and when it arrived.
+        fn recovery(&self) -> Vec<(MavCmd, Instant)> {
+            let mut all: Vec<(MavCmd, Instant)> = self
+                .set_mode
+                .iter()
+                .map(|(_, _, _, at)| (MavCmd::MAV_CMD_DO_SET_MODE, *at))
+                .chain(self.nav.iter().copied())
+                .collect();
+            all.sort_by_key(|(_, at)| *at);
+            all
+        }
+    }
+
+    /// How the fake answers a recovery command.
+    #[derive(Debug, Clone, Copy)]
+    enum Px4 {
+        /// Switch, ack `ACCEPTED`, and heartbeat the new mode at once.
+        Obey,
+        /// Lose the first `n` recovery commands on the link, then obey.
+        DropFirst(usize),
+        /// Never switch. Ack with this result, or not at all.
+        Ignore(Option<MavResult>),
+        /// Ack `DO_SET_MODE` with `DENIED` and stay put; obey the NAV commands.
+        DenySetMode,
     }
 
     /// A PX4-like peer on loopback. It heartbeats with its custom mode, streams
@@ -599,6 +684,7 @@ a_max = 3.0
     /// reports it. It stops on `stop`.
     struct FakeFc {
         socket: UdpSocket,
+        px4: Px4,
         position: Arc<Mutex<(f32, f32, f32)>>,
         seen: Arc<Mutex<Seen>>,
         stop: Arc<AtomicBool>,
@@ -612,6 +698,7 @@ a_max = 3.0
                 .unwrap();
             Self {
                 socket,
+                px4: Px4::Obey,
                 position: Arc::new(Mutex::new((100.0, 100.0, -30.0))),
                 seen: Arc::new(Mutex::new(Seen::default())),
                 stop: Arc::new(AtomicBool::new(false)),
@@ -627,8 +714,10 @@ a_max = 3.0
             let position = Arc::clone(&self.position);
             let seen = Arc::clone(&self.seen);
             let stop = Arc::clone(&self.stop);
+            let px4 = self.px4;
             thread::spawn(move || {
                 let mut mode = PX4_POSCTL;
+                let mut lost = 0_usize;
                 let mut sequence = 0_u8;
                 let mut buffer = [0_u8; MAX_FRAME];
                 let mut inbound = [0_u8; RECV_BUFFER];
@@ -675,28 +764,96 @@ a_max = 3.0
                         last_beat = Some(Instant::now());
                     }
                     if let Ok((count, _)) = socket.recv_from(&mut inbound) {
+                        let mut answers: Vec<MavMessage> = Vec::new();
                         decode_each(&inbound[..count], |_, message| {
                             let mut seen = lock(&seen);
-                            match message {
-                                MavMessage::COMMAND_LONG(data)
-                                    if data.command == MavCmd::MAV_CMD_DO_SET_MODE =>
-                                {
+                            let command = match message {
+                                MavMessage::COMMAND_LONG(data) => data,
+                                MavMessage::SET_POSITION_TARGET_LOCAL_NED(_) => {
+                                    seen.setpoints += 1;
+                                    return;
+                                }
+                                MavMessage::HEARTBEAT(_) => {
+                                    seen.heartbeats += 1;
+                                    return;
+                                }
+                                _ => return,
+                            };
+                            // The mode PX4 would switch to for this command.
+                            let target = match command.command {
+                                MavCmd::MAV_CMD_DO_SET_MODE => {
                                     seen.set_mode.push((
-                                        data.param1,
-                                        data.param2,
-                                        data.param3,
+                                        command.param1,
+                                        command.param2,
+                                        command.param3,
                                         Instant::now(),
                                     ));
-                                    if data.param2 == f32::from(PX4_MAIN_MODE_AUTO) {
-                                        mode = ((data.param3 as u32) << 24)
-                                            | (u32::from(PX4_MAIN_MODE_AUTO) << 16);
-                                    }
+                                    (command.param2 == f32::from(PX4_MAIN_MODE_AUTO)).then(|| {
+                                        ((command.param3 as u32) << 24)
+                                            | (u32::from(PX4_MAIN_MODE_AUTO) << 16)
+                                    })
                                 }
-                                MavMessage::SET_POSITION_TARGET_LOCAL_NED(_) => seen.setpoints += 1,
-                                MavMessage::HEARTBEAT(_) => seen.heartbeats += 1,
-                                _ => {}
+                                MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH => {
+                                    seen.nav.push((command.command, Instant::now()));
+                                    Some(custom_mode(RecoveryMode::Rtl))
+                                }
+                                MavCmd::MAV_CMD_NAV_LAND => {
+                                    seen.nav.push((command.command, Instant::now()));
+                                    Some(custom_mode(RecoveryMode::Land))
+                                }
+                                _ => None,
+                            };
+                            let Some(target) = target else {
+                                return;
+                            };
+                            let ack = |result| {
+                                MavMessage::COMMAND_ACK(COMMAND_ACK_DATA {
+                                    command: command.command,
+                                    result,
+                                })
+                            };
+                            let obey = match px4 {
+                                Px4::Obey => true,
+                                Px4::DropFirst(n) => {
+                                    lost += 1;
+                                    lost > n
+                                }
+                                Px4::Ignore(result) => {
+                                    answers.extend(result.map(ack));
+                                    false
+                                }
+                                Px4::DenySetMode => {
+                                    let set_mode = command.command == MavCmd::MAV_CMD_DO_SET_MODE;
+                                    if set_mode {
+                                        answers.push(ack(MavResult::MAV_RESULT_DENIED));
+                                    }
+                                    !set_mode
+                                }
+                            };
+                            if obey {
+                                mode = target;
+                                answers.push(ack(MavResult::MAV_RESULT_ACCEPTED));
+                                // Report the new mode at once, as PX4 does on a mode change.
+                                last_beat = None;
                             }
                         });
+                        for answer in &answers {
+                            send(answer, &mut sequence);
+                        }
+                    }
+                    if last_beat.is_none() {
+                        send(
+                            &MavMessage::HEARTBEAT(HEARTBEAT_DATA {
+                                custom_mode: mode,
+                                mavtype: MavType::MAV_TYPE_QUADROTOR,
+                                autopilot: MavAutopilot::MAV_AUTOPILOT_PX4,
+                                base_mode: MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+                                system_status: MavState::MAV_STATE_ACTIVE,
+                                mavlink_version: 3,
+                            }),
+                            &mut sequence,
+                        );
+                        last_beat = Some(Instant::now());
                     }
                     thread::sleep(Duration::from_millis(20));
                 }
@@ -1020,6 +1177,244 @@ a_max = 3.0
         assert_reverted_on_the_faulted_tick(&report, &seen, faulted_at, &text);
     }
 
+    /// Outside the 200 m square fence from the first fix, so the first tick after the first
+    /// heartbeat reverts. No timed breach: nothing depends on when a tick lands.
+    const OUTSIDE: (f32, f32, f32) = (600.0, 600.0, -30.0);
+
+    /// Run the loop against a fake PX4 that starts outside the fence and answers recovery
+    /// commands as `px4` says.
+    fn run_outside(
+        name: &str,
+        px4: Px4,
+        tune: impl FnOnce(&mut Config),
+        ticks: u64,
+        complex: &mut dyn Complex,
+    ) -> (RunReport, Seen, String) {
+        let mut fc = FakeFc::bind();
+        fc.px4 = px4;
+        *lock(&fc.position) = OUTSIDE;
+        let path = log_path(name);
+        let mut config = config(fc.port(), path.to_str().unwrap());
+        tune(&mut config);
+        let link = host_link(&fc);
+        let fc_thread = fc.spawn(loopback(&link));
+        let mut log = TickLog::open(&path, 1, 0).unwrap();
+        let report = run(
+            &config,
+            spec_worker(),
+            &mut log,
+            0,
+            link,
+            complex,
+            options(ticks),
+        )
+        .unwrap();
+        // Let a last datagram, such as a shutdown resend, land before the fake stops reading.
+        thread::sleep(Duration::from_millis(200));
+        fc.stop.store(true, Ordering::SeqCst);
+        fc_thread.join().unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        let seen = lock(&fc.seen).clone();
+        (report, seen, text)
+    }
+
+    /// Arrival jitter of the fake: it reads every 20 ms plus a 10 ms timeout, more on a
+    /// loaded runner. A duplicate send shows as a gap near zero, far under any wait.
+    const ARRIVAL_SLACK: Duration = Duration::from_millis(100);
+
+    /// No resend arrived earlier than the policy allows after the one before it.
+    fn assert_never_early(config_wait: impl Fn(u32) -> u64, sends: &[(MavCmd, Instant)]) {
+        for (index, pair) in sends.windows(2).enumerate() {
+            let gap = pair[1].1.duration_since(pair[0].1);
+            let attempt = u32::try_from(index + 1).unwrap();
+            let wait = Duration::from_millis(config_wait(attempt));
+            assert!(
+                gap + ARRIVAL_SLACK >= wait,
+                "resend {attempt} after {gap:?}, policy wait {wait:?}: {sends:?}"
+            );
+        }
+    }
+
+    fn test_policy() -> Policy {
+        policy_of(&config(1, "unused.log"))
+    }
+
+    fn tick_lines(text: &str) -> Vec<&str> {
+        text.lines().filter(|l| l.starts_with("tick=")).collect()
+    }
+
+    #[test]
+    fn a_dropped_first_recovery_command_is_resent_and_confirmed() {
+        let (report, seen, text) =
+            run_outside("dropped", Px4::DropFirst(1), |_| {}, 15, &mut StubComplex);
+        let sends = seen.recovery();
+        assert_eq!(sends.len(), 2, "{sends:?}\n{text}");
+        assert!(sends
+            .iter()
+            .all(|(command, _)| *command == MavCmd::MAV_CMD_DO_SET_MODE));
+        assert!(seen
+            .set_mode
+            .iter()
+            .all(|(p1, p2, p3, _)| (*p1, *p2, *p3) == (1.0, 4.0, 5.0)));
+        let policy = test_policy();
+        assert_never_early(|n| policy.wait_after(n), &sends);
+        assert!(report.recovery_confirmed, "{report:?}\n{text}");
+        assert_eq!(report.recovery_attempts, 2, "{report:?}");
+        assert!(!report.watchdog_fired);
+        let lines = tick_lines(&text);
+        assert!(
+            lines.iter().any(|l| l.contains("recovery_confirmed")),
+            "{text}"
+        );
+        assert!(lines.last().unwrap().contains("command=idle"), "{text}");
+    }
+
+    #[test]
+    fn a_vehicle_that_never_switches_gets_the_documented_order_then_silence() {
+        // 300 ms, 600 ms cap, two per step: six sends over about 2.7 s, used up at 3.3 s.
+        let (report, seen, text) =
+            run_outside("never", Px4::Ignore(None), |_| {}, 45, &mut StubComplex);
+        let sends = seen.recovery();
+        let commands: Vec<MavCmd> = sends.iter().map(|(command, _)| *command).collect();
+        assert_eq!(
+            commands,
+            [
+                MavCmd::MAV_CMD_DO_SET_MODE,
+                MavCmd::MAV_CMD_DO_SET_MODE,
+                MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH,
+                MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH,
+                MavCmd::MAV_CMD_NAV_LAND,
+                MavCmd::MAV_CMD_NAV_LAND,
+            ],
+            "{text}"
+        );
+        let policy = test_policy();
+        assert_never_early(|n| policy.wait_after(n), &sends);
+        // The cadence is bounded above too: a resend is never held back by much more than
+        // a tick plus the arrival jitter. Loose for a loaded runner.
+        for (index, pair) in sends.windows(2).enumerate() {
+            let gap = pair[1].1.duration_since(pair[0].1);
+            let wait = policy.wait_after(u32::try_from(index + 1).unwrap());
+            assert!(
+                gap < Duration::from_millis(wait + 600),
+                "{gap:?}: {sends:?}"
+            );
+        }
+        assert!(report.recovery_sent);
+        assert!(!report.recovery_confirmed);
+        assert_eq!(report.recovery_attempts, 6);
+        assert_eq!(seen.setpoints, 0);
+        let lines = tick_lines(&text);
+        let last = lines.last().unwrap();
+        for item in [
+            "recovery_unconfirmed",
+            "attempts:6",
+            "latched",
+            "verdict=revert",
+        ] {
+            assert!(last.contains(item), "{item}: {last}");
+        }
+    }
+
+    #[test]
+    fn denied_set_mode_falls_back_to_return_to_launch_at_once() {
+        // A long schedule, so a fallback that waited for it would be plain to see.
+        let (report, seen, text) = run_outside(
+            "denied",
+            Px4::DenySetMode,
+            |config| {
+                config.recovery.retry_initial_ms = 2_000;
+                config.recovery.retry_cap_ms = 2_000;
+            },
+            15,
+            &mut StubComplex,
+        );
+        let sends = seen.recovery();
+        let commands: Vec<MavCmd> = sends.iter().map(|(command, _)| *command).collect();
+        assert_eq!(
+            commands,
+            [
+                MavCmd::MAV_CMD_DO_SET_MODE,
+                MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH
+            ],
+            "{text}"
+        );
+        let gap = sends[1].1.duration_since(sends[0].1);
+        assert!(gap < Duration::from_millis(1_000), "{gap:?}\n{text}");
+        assert!(report.recovery_confirmed, "{report:?}\n{text}");
+        let lines = tick_lines(&text);
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("fallback:denied") && l.contains("step:nav_rtl")),
+            "{text}"
+        );
+        assert!(
+            lines.last().unwrap().contains("recovery_confirmed"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_accepted_ack_with_no_mode_report_keeps_resending() {
+        let (report, seen, text) = run_outside(
+            "accepted",
+            Px4::Ignore(Some(MavResult::MAV_RESULT_ACCEPTED)),
+            |_| {},
+            25,
+            &mut StubComplex,
+        );
+        let sends = seen.recovery();
+        // An accepted ack is not a confirmed mode: the second DO_SET_MODE goes out, then
+        // the order moves on.
+        assert!(sends.len() >= 3, "{sends:?}\n{text}");
+        assert_eq!(seen.set_mode.len(), 2, "{text}");
+        let policy = test_policy();
+        assert_never_early(|n| policy.wait_after(n), &sends);
+        assert!(!report.recovery_confirmed);
+        let lines = tick_lines(&text);
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("ack:accepted") && l.contains("recovery_pending")),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn the_tick_and_the_watchdog_never_send_the_same_attempt() {
+        // The tick thread blocks for 1.5 s while resends are due. The watchdog takes over the
+        // same latch, then the tick thread comes back to it.
+        let window = Arc::new(Mutex::new(None));
+        let mut stall = Stall {
+            tick: 0,
+            at: 6,
+            hold: Duration::from_millis(1_500),
+            window: Arc::clone(&window),
+        };
+        let (report, seen, text) = run_outside("shared", Px4::Ignore(None), |_| {}, 20, &mut stall);
+        let sends = seen.recovery();
+        assert!(report.watchdog_fired, "{report:?}\n{text}");
+        // Every send the fake saw is one attempt the latch counted, and no two are close.
+        assert_eq!(
+            u32::try_from(sends.len()).unwrap(),
+            report.recovery_attempts,
+            "{sends:?}"
+        );
+        let policy = test_policy();
+        assert_never_early(|n| policy.wait_after(n), &sends);
+        let (started, ended) = lock(&window).unwrap();
+        assert!(
+            sends.iter().any(|(_, at)| *at > started && *at < ended),
+            "no resend during the stall: {sends:?}"
+        );
+        assert!(
+            sends.iter().any(|(_, at)| *at > ended),
+            "the tick thread did not resume the resends: {sends:?}"
+        );
+    }
+
     #[test]
     fn nothing_is_commanded_before_the_flight_controller_is_heard() {
         let silent = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -1131,6 +1526,8 @@ mod doc_tests {
             "no_request",
             "latched",
             "The deadline is preemptive.",
+            "Recovery is resent until the flight controller reports it.",
+            "never double-send",
             "udpin:host:port",
             "No PX4 SITL run of this loop is recorded.",
         ] {

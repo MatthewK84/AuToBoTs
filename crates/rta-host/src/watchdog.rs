@@ -23,6 +23,12 @@ impl Watchdog {
         self.last_published_ms = now_ms;
     }
 
+    /// True once `watchdog_misses` periods have passed since the last published tick.
+    pub fn stalled(&self, now_ms: u64) -> bool {
+        let window = self.period_ms.saturating_mul(self.misses as u64);
+        now_ms.saturating_sub(self.last_published_ms) >= window
+    }
+
     pub fn check(
         &self,
         now_ms: u64,
@@ -31,8 +37,7 @@ impl Watchdog {
         sender: &mut ModeSender,
         sink: &mut Vec<String>,
     ) {
-        let window = self.period_ms.saturating_mul(self.misses as u64);
-        if now_ms.saturating_sub(self.last_published_ms) >= window {
+        if self.stalled(now_ms) {
             sender.send(Verdict::Revert, None, reported, recovery, sink);
         }
     }

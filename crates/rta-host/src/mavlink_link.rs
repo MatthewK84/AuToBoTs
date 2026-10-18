@@ -138,10 +138,66 @@ pub fn decode_each<F>(datagram: &[u8], mut each: F)
 where
     F: FnMut(&MavHeader, &MavMessage),
 {
+    decode_frames(datagram, |header, frame| {
+        if let Frame::Message(message) = frame {
+            each(header, message);
+        }
+    });
+}
+
+/// One frame from a datagram. `COMMAND_ACK` is read from its raw payload, because the common
+/// dialect in mavlink 0.18 has no `MAV_RESULT_IN_PROGRESS` and would reject that frame.
+#[derive(Debug)]
+pub enum Frame<'a> {
+    Message(&'a MavMessage),
+    CommandAck(CommandAck),
+}
+
+/// `COMMAND_ACK` (id 77): the command it answers and the raw `MAV_RESULT`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommandAck {
+    pub command: u16,
+    pub result: u8,
+}
+
+/// Common dialect id of `COMMAND_ACK`.
+pub const COMMAND_ACK_ID: u32 = 77;
+
+/// Read a `COMMAND_ACK` payload. MAVLink 2 trims trailing zero bytes, so a short payload is
+/// zero-filled: command is bytes 0 and 1 little-endian, result is byte 2.
+pub fn command_ack(payload: &[u8]) -> CommandAck {
+    let byte = |index: usize| payload.get(index).copied().unwrap_or(0);
+    CommandAck {
+        command: u16::from_le_bytes([byte(0), byte(1)]),
+        result: byte(2),
+    }
+}
+
+/// Like `decode_each`, and also yields every `COMMAND_ACK` whatever its result value.
+pub fn decode_frames<F>(datagram: &[u8], mut each: F)
+where
+    F: FnMut(&MavHeader, Frame<'_>),
+{
     let mut reader = mavlink::peek_reader::PeekReader::<_, MAX_FRAME>::new(datagram);
     for _ in 0..MAX_FRAMES_PER_DATAGRAM {
-        match mavlink::read_any_msg::<MavMessage, _>(&mut reader) {
-            Ok((header, message)) => each(&header, &message),
+        let Ok(raw) = mavlink::read_any_raw_message::<MavMessage, _>(&mut reader) else {
+            break;
+        };
+        let header = MavHeader {
+            system_id: raw.system_id(),
+            component_id: raw.component_id(),
+            sequence: raw.sequence(),
+        };
+        if raw.message_id() == COMMAND_ACK_ID {
+            each(&header, Frame::CommandAck(command_ack(raw.payload())));
+            continue;
+        }
+        match <MavMessage as mavlink::Message>::parse(
+            raw.version(),
+            raw.message_id(),
+            raw.payload(),
+        ) {
+            Ok(message) => each(&header, Frame::Message(&message)),
             Err(_) => break,
         }
     }
@@ -231,6 +287,91 @@ mod tests {
         let name = ["SYS", "_STATUS"].concat();
         assert!(!spec.contains(&name));
         assert!(!spec.contains("battery"));
+    }
+
+    /// MAVLink `crc_accumulate` (CRC-16/MCRF4XX).
+    fn x25(data: &[u8]) -> u16 {
+        let mut crc = 0xFFFF_u16;
+        for byte in data {
+            let mut tmp = byte ^ (crc & 0xFF) as u8;
+            tmp ^= tmp << 4;
+            let tmp = u16::from(tmp);
+            crc = (crc >> 8) ^ (tmp << 8) ^ (tmp << 3) ^ (tmp >> 4);
+        }
+        crc
+    }
+
+    fn ack_frame(command: u16, result: u8) -> Vec<u8> {
+        // Build a valid frame with the typed encoder, then patch the result byte and the
+        // checksum so a result the dialect crate lacks can be carried.
+        use mavlink::dialects::common::{MavCmd, MavResult, COMMAND_ACK_DATA};
+        let mut buffer = [0_u8; MAX_FRAME];
+        let message = MavMessage::COMMAND_ACK(COMMAND_ACK_DATA {
+            command: MavCmd::MAV_CMD_DO_SET_MODE,
+            result: MavResult::MAV_RESULT_FAILED,
+        });
+        let count = encode(MavHeader::default(), &message, &mut buffer).unwrap();
+        let mut frame = buffer[..count].to_vec();
+        let length = usize::from(frame[1]);
+        let mut payload = vec![0_u8; 3];
+        payload[..2].copy_from_slice(&command.to_le_bytes());
+        payload[2] = result;
+        while payload.last() == Some(&0) && payload.len() > 1 {
+            payload.pop();
+        }
+        frame.truncate(10);
+        frame[1] = payload.len() as u8;
+        frame.extend_from_slice(&payload);
+        let mut checked = frame[1..].to_vec();
+        checked.push(143); // COMMAND_ACK extra CRC.
+        frame.extend_from_slice(&x25(&checked).to_le_bytes());
+        assert!(length >= 1);
+        frame
+    }
+
+    #[test]
+    fn command_ack_is_read_for_every_result_including_in_progress() {
+        for result in 0..=6_u8 {
+            let mut datagram = ack_frame(176, result);
+            // A heartbeat after the ack is still read.
+            let mut buffer = [0_u8; MAX_FRAME];
+            let count = encode(MavHeader::default(), &heartbeat(), &mut buffer).unwrap();
+            datagram.extend_from_slice(&buffer[..count]);
+            let mut acks = Vec::new();
+            let mut heartbeats = 0;
+            decode_frames(&datagram, |_, frame| match frame {
+                Frame::CommandAck(ack) => acks.push(ack),
+                Frame::Message(MavMessage::HEARTBEAT(_)) => heartbeats += 1,
+                Frame::Message(_) => {}
+            });
+            assert_eq!(
+                acks,
+                [CommandAck {
+                    command: 176,
+                    result
+                }],
+                "{result}"
+            );
+            assert_eq!(heartbeats, 1, "{result}");
+        }
+    }
+
+    #[test]
+    fn a_trimmed_ack_payload_reads_as_zero() {
+        assert_eq!(
+            command_ack(&[176]),
+            CommandAck {
+                command: 176,
+                result: 0
+            }
+        );
+        assert_eq!(
+            command_ack(&[]),
+            CommandAck {
+                command: 0,
+                result: 0
+            }
+        );
     }
 
     #[test]

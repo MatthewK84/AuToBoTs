@@ -28,6 +28,7 @@ pub mod packet;
 pub mod planning;
 pub mod quarantine;
 pub mod read;
+pub mod recovery;
 pub mod replay;
 pub mod requirements;
 pub mod runtime;
