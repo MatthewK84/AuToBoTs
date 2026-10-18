@@ -1,6 +1,9 @@
 name: kani
+# Runs on pull requests too, so a harness change is proved before merge.
+# It is still not a dependency of the ci workflow's close-named-issue job.
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches: [main]
 jobs:

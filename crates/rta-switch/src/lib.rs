@@ -86,6 +86,18 @@ fn setpoints(request: Option<Request>, commit: bool) -> SwitchCommand {
     }
 }
 
+/// Energy is sufficient only if both values are finite, non-negative, and
+/// endurance strictly exceeds the time to the rally point. Every comparison is
+/// written so a NaN makes it false, which reverts.
+pub fn energy_ok(endurance_s: f64, time_to_rally_s: f64) -> bool {
+    endurance_s.is_finite()
+        && time_to_rally_s.is_finite()
+        && time_to_rally_s >= 0.0
+        && endurance_s > time_to_rally_s
+}
+
+/// Fails closed on any input, including one built without
+/// [`TickInput::try_new`]: a non-finite or negative energy value is `Energy` Revert.
 pub fn decide_input(input: &TickInput) -> (Command, TickLog) {
     if input.pilot_override {
         return inhibit(Reason::PilotOverride);
@@ -110,7 +122,7 @@ pub fn decide_input(input: &TickInput) -> (Command, TickLog) {
             },
         );
     }
-    if input.endurance_s <= input.time_to_rally_s {
+    if !energy_ok(input.endurance_s, input.time_to_rally_s) {
         return (
             Command::Recovery,
             TickLog {
@@ -395,17 +407,111 @@ mod tests {
     }
 
     #[test]
-    fn kani_harness_covers_decide_only() {
+    fn kani_harness_covers_decide_and_decide_input() {
         let harness = include_str!("verify.rs");
-        assert!(harness.contains("fn decide_variants_are_exclusive"));
-        assert!(harness.contains("fn revert_never_yields_setpoints"));
-        assert!(harness.contains("fn inhibit_never_yields_commit"));
+        for name in [
+            "fn decide_variants_are_exclusive",
+            "fn revert_never_yields_setpoints",
+            "fn inhibit_never_yields_commit",
+            "fn decide_input_commit_needs_every_gate",
+            "fn decide_input_non_finite_energy_reverts",
+            "fn decide_input_verdict_matches_command",
+            "fn tick_input_try_new_admits_only_finite_energy",
+        ] {
+            assert!(harness.contains(name), "{name}");
+        }
         assert!(harness.contains("decide("));
+        assert!(harness.contains("decide_input("));
+        assert!(harness.contains("kani::any::<f64>()"));
         assert!(!harness.contains("mavlink"));
         let docs = include_str!("../../../docs/kani.md");
         assert!(docs.contains("cargo kani -p rta-switch"));
+        assert!(docs.contains("decide_input"));
         let ci = include_str!("../../../.github/workflows/ci.yml");
         assert!(!ci.contains("cargo kani"));
+        let kani = include_str!("../../../.github/workflows/kani.yml");
+        assert!(kani.contains("pull_request:"));
+        assert!(kani.contains("cargo kani -p rta-switch"));
+        let coverage = include_str!("../../../scripts/coverage.sh");
+        assert!(coverage.contains("12decide_input$"));
+    }
+
+    #[test]
+    fn estimator_failure_reverts_to_recovery() {
+        let mut input = ok();
+        input.estimator_ok = false;
+        let (command, log) = decide_input(&input);
+        assert_eq!(command, Command::Recovery);
+        assert_eq!(log.verdict, Verdict::Revert);
+        assert_eq!(log.reason, Reason::Estimator);
+    }
+
+    #[test]
+    fn energy_at_or_below_rally_reverts() {
+        for (endurance, rally) in [(10.0, 10.0), (9.0, 10.0), (0.0, 0.0)] {
+            let mut input = ok();
+            input.endurance_s = endurance;
+            input.time_to_rally_s = rally;
+            let (command, log) = decide_input(&input);
+            assert_eq!(command, Command::Recovery, "{endurance} {rally}");
+            assert_eq!(log.verdict, Verdict::Revert);
+            assert_eq!(log.reason, Reason::Energy);
+        }
+    }
+
+    #[test]
+    // A struct literal bypasses `TickInput::try_new`; the switch must still fail closed.
+    fn non_finite_or_negative_energy_never_commits() {
+        let bad = [f64::NAN, -f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0];
+        let mut cases = Vec::new();
+        for value in bad {
+            cases.push((value, 10.0));
+            cases.push((100.0, value));
+            cases.push((value, value));
+        }
+        cases.push((f64::INFINITY, f64::INFINITY));
+        for (endurance, rally) in cases {
+            let mut input = ok();
+            input.endurance_s = endurance;
+            input.time_to_rally_s = rally;
+            let (command, log) = decide_input(&input);
+            assert_eq!(command, Command::Recovery, "{endurance} {rally}");
+            assert_eq!(log.verdict, Verdict::Revert, "{endurance} {rally}");
+            assert_eq!(log.reason, Reason::Energy, "{endurance} {rally}");
+            assert!(log.grant_hash.is_none());
+        }
+    }
+
+    #[test]
+    fn energy_ok_is_false_for_every_nan_ordering() {
+        assert!(energy_ok(100.0, 10.0));
+        assert!(energy_ok(0.5, 0.0));
+        assert!(!energy_ok(f64::NAN, 10.0));
+        assert!(!energy_ok(100.0, f64::NAN));
+        assert!(!energy_ok(f64::NAN, f64::NAN));
+        assert!(!energy_ok(f64::INFINITY, 10.0));
+        assert!(!energy_ok(100.0, -1.0));
+        assert!(!energy_ok(10.0, 10.0));
+    }
+
+    #[test]
+    fn a_valid_input_from_try_new_commits() {
+        let input = TickInput::try_new(Phase::Commit, true, true, false, false, true, 100.0, 10.0)
+            .expect("valid");
+        assert_eq!(input, ok());
+        let (command, log) = decide_input(&input);
+        assert_eq!(command, Command::Commit);
+        assert_eq!(log.verdict, Verdict::Pass);
+        assert_eq!(log.reason, Reason::None);
+    }
+
+    #[test]
+    fn abort_phase_reverts_without_a_request() {
+        let mut input = ok();
+        input.phase = Phase::Abort;
+        let (command, log) = decide_input(&input);
+        assert_eq!(command, Command::Abort);
+        assert_eq!(log.verdict, Verdict::Revert);
     }
 
     #[test]
