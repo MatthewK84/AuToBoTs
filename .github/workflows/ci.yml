@@ -44,8 +44,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@18f0487477426dce244608110aa2660c2893deb7 # 1.98.1
         with:
           targets: aarch64-unknown-linux-gnu
-      - name: Install the aarch64 linker
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
+      # libc6-dev-arm64-cross holds the target glibc and crt files (Scrt1.o). It is only a
+      # Recommends of the cross gcc, so --no-install-recommends needs it named.
+      - name: Install the aarch64 linker and target libc
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
       # The Jetson target triple. A cross-build check, not a run on the board (docs/target.md).
       - name: Cross-build the release binaries for aarch64
         env:
