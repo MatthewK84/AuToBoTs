@@ -23,6 +23,6 @@ Message ids for the common dialect:
 
 Outbound commands:
 
-- `SwitchCommand::Mode` is `COMMAND_LONG` with `MAV_CMD_DO_SET_MODE`, message id 76. `SET_MODE` is superseded. The bench custom mode is 6 for rtl, 5 for loiter, and 4 for land.
+- `SwitchCommand::Mode` is `COMMAND_LONG` with `MAV_CMD_DO_SET_MODE`, message id 76. `SET_MODE` is superseded. The PX4 main mode is AUTO (4) in param2. The sub-mode in param3 is 5 for rtl, 3 for loiter, and 6 for land. The mode table is in `docs/icd-fc.md`.
 - `SwitchCommand::Setpoints` is `SET_POSITION_TARGET_LOCAL_NED`, message id 84.
 - `SwitchCommand::Idle` sends nothing. A second revert tick sends nothing when the reported custom mode already matches recovery.

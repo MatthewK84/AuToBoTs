@@ -6,7 +6,7 @@ The host has no `clear_fault` step. A latched interpreter fault clears only by r
 
 `Inhibit` keeps the aircraft in the current mode. The switch sends setpoints with `commit` cleared. The operator sees the commit bit go to zero in the tick log. No recovery mode is commanded.
 
-`Revert` commands the configured recovery mode. The switch sends `COMMAND_LONG` `MAV_CMD_DO_SET_MODE` when the reported mode is not already recovery. The bench custom mode is 6 for rtl, 5 for loiter, and 4 for land. A second revert tick sends nothing once the reported mode matches. The operator sees `verdict=revert` in the tick log and the mode change on the flight controller.
+`Revert` commands the configured recovery mode. The switch sends `COMMAND_LONG` `MAV_CMD_DO_SET_MODE` when the reported mode is not already recovery. The PX4 main mode is AUTO (4) in param2. The sub-mode in param3 is 5 for rtl, 3 for loiter, and 6 for land. The mode table is in `docs/icd-fc.md`. A second revert tick sends nothing once the reported mode matches. The operator sees `verdict=revert` in the tick log and the mode change on the flight controller.
 
 `Pass` forwards the complex-function request, including commit, only when that request carries commit.
 
