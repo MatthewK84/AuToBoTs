@@ -1,3 +1,9 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+
+# A panic in a release build aborts the process at once: no unwinding, no partial state
+# carried on by another thread. The flight controller's own failsafe takes over
+# (docs/panics.md).
+[profile.release]
+panic = "abort"

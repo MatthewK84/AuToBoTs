@@ -63,6 +63,12 @@ pub const MATRIX: &[Row] = &[
         commit: false,
         recovery: true,
     },
+    Row {
+        name: "Companion abort",
+        navigation: false,
+        commit: false,
+        recovery: false,
+    },
 ];
 
 #[cfg(test)]

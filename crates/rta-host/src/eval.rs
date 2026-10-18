@@ -42,7 +42,11 @@ impl Evaluator {
         if self.faulted {
             return fault();
         }
-        match monitor.accept(event(record), monotonic_to_interpreter(at_ms)) {
+        let accepted = match event(record) {
+            Some(event) => monitor.accept(event, monotonic_to_interpreter(at_ms)),
+            None => Err("non-finite value in a constructed record".into()),
+        };
+        match accepted {
             Err(_) => {
                 self.faulted = true;
                 fault()

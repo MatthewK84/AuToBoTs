@@ -1,5 +1,18 @@
 //! Re-evaluate a tick log, or every log in a directory, against the spec.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::todo,
+        clippy::unimplemented
+    )
+)]
+
 use std::env;
 use std::process::ExitCode;
 

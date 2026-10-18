@@ -55,12 +55,13 @@ pub const LEARNING_HAZARDS: &[HazardRow] = &[
     },
 ];
 
+/// The outcome in the table. A hazard with no row is Revert, the fail-closed answer; a test
+/// requires every hazard to have a row.
 pub fn outcome(hazard: LearningHazard) -> HazardOutcome {
     LEARNING_HAZARDS
         .iter()
         .find(|row| row.hazard == hazard)
-        .map(|row| row.outcome)
-        .expect("every learning hazard has a row")
+        .map_or(HazardOutcome::Revert, |row| row.outcome)
 }
 
 #[cfg(test)]

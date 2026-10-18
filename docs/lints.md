@@ -1,6 +1,6 @@
 # Lint set
 
-Clippy already denies warnings on the workspace. The switch crate adds a set.
+Clippy already denies warnings on the workspace. The switch crate adds a set. The host library and binaries deny the same three plus `clippy::panic`, `clippy::unreachable`, `clippy::todo`, and `clippy::unimplemented` outside tests; release builds abort on panic (`docs/panics.md`).
 
 | Lint | Rule |
 | --- | --- |

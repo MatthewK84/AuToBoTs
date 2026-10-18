@@ -114,8 +114,10 @@ pub fn indication_message(shown: Indication) -> MavMessage {
     let line = indication_line(shown);
     let bytes = line.as_bytes();
     let mut text = [0u8; 50];
-    let n = bytes.len().min(50);
-    text[..n].copy_from_slice(&bytes[..n]);
+    // `zip` stops at the shorter side: at most 50 bytes, never out of bounds.
+    for (to, from) in text.iter_mut().zip(bytes) {
+        *to = *from;
+    }
     let severity = if shown == Indication::Reverted {
         MavSeverity::MAV_SEVERITY_WARNING
     } else {
