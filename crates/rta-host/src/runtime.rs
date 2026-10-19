@@ -285,19 +285,26 @@ impl Shared {
 
     /// Send the recovery step that is due, if any, holding the latch lock across the send.
     /// Returns the step that went on the wire. A local send error leaves the step due.
+    ///
+    /// The clock is read here, under the latch lock, and not taken from the caller. A tick
+    /// reads its clock at the top and can block for a long time before it gets here (a slow
+    /// complex function, the evaluation deadline, a contended lock, a descheduled thread).
+    /// Polled and recorded with that stale time, the send is stamped earlier than it went
+    /// out and the next resend falls due early by the delay. The send is recorded at the
+    /// time it completed, so the next one waits at least the full policy wait after it.
     fn drive_recovery(
         &self,
         sender: &mut Sender,
         target: Target,
-        now_ms: u64,
+        clock: &Clock,
         reported: Option<RecoveryMode>,
     ) -> Option<Step> {
         let mut latch = lock(&self.recovery);
-        let step = latch.poll(now_ms, reported)?;
+        let step = latch.poll(clock.now_ms(), reported)?;
         let ok = sender
             .send(&step.message(target, latch.confirmation()))
             .is_ok();
-        latch.sent(now_ms, ok);
+        latch.sent(clock.now_ms(), ok);
         ok.then_some(step)
     }
 }
@@ -477,7 +484,7 @@ pub fn run<W: Write>(
                 SwitchCommand::Idle => {}
             }
             // Resends run whatever this tick decided, until the latch is confirmed or used up.
-            if let Some(step) = shared.drive_recovery(&mut sender, target, now_ms, reported) {
+            if let Some(step) = shared.drive_recovery(&mut sender, target, &clock, reported) {
                 reasons.push(Reason::Sent(step));
             }
         } else if target.is_none() {
@@ -534,7 +541,7 @@ pub fn run<W: Write>(
     if let (Some(target), true) = (vehicle.fc_target(), may_act && reported != Some(recovery)) {
         let now_ms = clock.now_ms();
         shared.engage_recovery(now_ms);
-        shared.drive_recovery(&mut sender, target, now_ms, reported);
+        shared.drive_recovery(&mut sender, target, &clock, reported);
     }
     let _ = log.flush();
     worker.shutdown();
@@ -590,10 +597,13 @@ fn spawn_receiver(
                                 }
                             });
                         }
-                        // The vehicle lock is released before the latch lock is taken.
+                        // The vehicle lock is released before the latch lock is taken. An ack
+                        // is timed under the latch lock, like a send, so a wait for the lock
+                        // does not shorten the wait the ack grants.
                         let mut latch = lock(&shared.recovery);
+                        let acked_ms = clock.now_ms();
                         for ack in acks.iter().flatten() {
-                            latch.on_ack(now_ms, ack.command, AckResult::from_raw(ack.result));
+                            latch.on_ack(acked_ms, ack.command, AckResult::from_raw(ack.result));
                         }
                     }
                     Ok(None) => {}
@@ -640,7 +650,7 @@ fn spawn_watchdog(
                     continue;
                 };
                 if shared
-                    .drive_recovery(&mut sender, target, now_ms, reported)
+                    .drive_recovery(&mut sender, target, &clock, reported)
                     .is_some()
                 {
                     shared.watchdog_fired.store(true, Ordering::SeqCst);
@@ -1545,6 +1555,73 @@ ready_fix_age_ms = 200
             sends.iter().any(|(_, at)| *at > ended),
             "the tick thread did not resume the resends: {sends:?}"
         );
+    }
+
+    /// A complex function that blocks for `hold` on a tick when, by what the fake has seen,
+    /// a resend is due: after the tick has read the clock and before it drives the latch.
+    /// It never blocks long enough to wake the watchdog the test configures.
+    struct SlowWhenDue {
+        seen: Arc<Mutex<Seen>>,
+        policy: Policy,
+        /// Attempts in the whole fallback order. Nothing is due once they are used up.
+        attempts: u32,
+        hold: Duration,
+        stalls: u32,
+    }
+
+    impl Complex for SlowWhenDue {
+        fn request(&mut self) -> Option<Request> {
+            let sends = lock(&self.seen).recovery();
+            // Sends leave on the tick grid and arrive up to 30 ms later, so a resend falls due
+            // on the tick that sees about one wait, less half a period, since the last arrival.
+            let attempt = u32::try_from(sends.len()).unwrap();
+            let due = attempt < self.attempts
+                && sends.last().is_some_and(|(_, last)| {
+                    let wait = Duration::from_millis(self.policy.wait_after(attempt));
+                    last.elapsed() + Duration::from_millis(50) >= wait
+                });
+            if due && self.stalls > 0 {
+                self.stalls -= 1;
+                thread::sleep(self.hold);
+            }
+            None
+        }
+    }
+
+    #[test]
+    fn a_slow_tick_does_not_pull_the_next_resend_early() {
+        // A tick that reads the clock, then blocks for 400 ms before it sends a due resend.
+        // The watchdog is held off, so only the tick thread sends. The next resend must wait
+        // the full policy wait after the send that went on the wire. Timed from the clock
+        // reading at the top of the slow tick, it falls due 400 ms early and the next, fast,
+        // tick sends it about 200 ms after the one before.
+        let mut fc = FakeFc::bind();
+        fc.px4 = Px4::Ignore(None);
+        *lock(&fc.position) = OUTSIDE;
+        let policy = test_policy();
+        let mut slow = SlowWhenDue {
+            seen: Arc::clone(&fc.seen),
+            policy,
+            attempts: policy.attempts_per_step * 3,
+            hold: Duration::from_millis(400),
+            stalls: 3,
+        };
+        let (report, seen, text) = run_fc(
+            "slow-tick",
+            &fc,
+            |config| config.tick.watchdog_misses = 50,
+            40,
+            &mut slow,
+        );
+        let sends = seen.recovery();
+        assert!(!report.watchdog_fired, "{report:?}\n{text}");
+        assert_eq!(slow.stalls, 0, "the slow ticks did not all run: {sends:?}");
+        assert_eq!(
+            u32::try_from(sends.len()).unwrap(),
+            report.recovery_attempts,
+            "{sends:?}"
+        );
+        assert_never_early(|n| policy.wait_after(n), &sends);
     }
 
     /// A complex function that asks for nothing and runs scripted actions on given ticks, on
