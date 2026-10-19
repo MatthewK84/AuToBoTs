@@ -18,7 +18,7 @@ The first send goes out on the tick that engages the latch. After send `n`, the 
 | `recovery.retry_cap_ms` | 2000 | at least `retry_initial_ms` |
 | `recovery.attempts_per_step` | 3 | 1 to 10 |
 
-A send is due only on a tick or a watchdog poll, so it can go out late by up to one period. It never goes out early. A local socket error is not counted as an attempt, and that step stays due.
+A send is due only on a tick or a watchdog poll, so it can go out late by up to one period. It never goes out early. The clock for a send is read under the latch lock, to poll, and again after the send, to record it; it is not the reading a tick took at its top. A tick held up between the two (a slow complex function, the evaluation wait, a descheduled thread) would otherwise stamp the send early and pull the next one early by the delay. An ack is timed under the latch lock the same way. A local socket error is not counted as an attempt, and that step stays due.
 
 ## Fallback order
 
