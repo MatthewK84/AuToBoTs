@@ -10,6 +10,8 @@ CPU over the run was 96 percent. The power note is an order of magnitude for the
 
 Pausing the eval loop past three 50 ms ticks made the watchdog command recovery. The sink line was `mode Rtl`.
 
-The raw line is in `crates/rta-host/fixtures/target-timing.txt`.
+The raw line is in `crates/rta-host/fixtures/target-timing.txt`, labelled `evidence=host-standin measured_on=build-host`.
+
+Simulated aarch64 timing (qemu user mode and a scaled host model) is in `docs/target-timing.md`. It is SIMULATED evidence, not a measurement on the Orin, and does not replace the board run.
 
 The follow-up review is in `docs/deadline.md`. A paced host run stayed under the deadline. The Orin run is the production-test hook, not a result claimed here.

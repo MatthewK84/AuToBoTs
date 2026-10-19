@@ -46,6 +46,7 @@ mod tests {
             "bash scripts/sitl-trips.sh",
             "bash scripts/sitl.sh",
             "cargo build --locked --release --workspace",
+            "bash scripts/target-sim.sh qemu host-sim",
         ] {
             assert!(CONTRIBUTING.contains(command), "{command}");
             assert!(CI.contains(command), "CI does not run {command}");

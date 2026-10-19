@@ -10,7 +10,7 @@ The host library and every host binary deny the panicking constructs outside tes
 | `learning_hazards.rs` (now `crates/rta-docs`, not flight code) | `expect` on a missing row | Revert, the fail-closed outcome; a test still requires every row |
 | `command_out.rs` | sliced status-text copy | a bounded `zip` |
 | `sitl.rs` | indexed percentiles | `get`, `first`, and `last` |
-| `bin/rta-target.rs` | `expect` on config, spec, and hover record; indexed `/proc` fields | exit 1 with a message; a missing field reads as zero |
+| `bin/rta-target.rs` | bad arguments, config, spec, and hover record; `/proc` fields | exit 1 with a message and the usage; a missing field reads as zero or `unknown` |
 | `bin/rta-trips.rs` | `expect` on the trip records | exit 1 with a message |
 
 Lints are not a proof. Arithmetic overflow, a panic inside a dependency such as the RTLola interpreter or the MAVLink crate, and a failed allocation are not caught by them.

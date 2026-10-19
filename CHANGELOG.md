@@ -10,6 +10,8 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 - `decide_input` fails closed on non-finite energy, proved with Kani (#201).
 - Setpoints are position and yaw only (`type_mask` `0x09F8`), with yaw passed through, `time_boot_ms` from the monotonic run clock, and the target system and component from the heard flight-controller heartbeat. `COMMAND_ACK` counts only from that system and component (#204).
 - The runtime tests use an 80 ms deadline, so a loaded runner cannot make the first tick late (#205).
+- A recovery resend is timed from the clock read under the latch lock, after the send, not from the reading at the top of the tick. A tick held up before it sent could pull the next resend early by the delay; the stress run saw one 333 ms after the last against a 600 ms wait.
+- `rta-target` no longer names a board it did not run on. Its line carries `evidence` (`simulated`, `host-standin`, `real-target`) and `measured_on`; the 2026-10-09 fixtures are relabelled `evidence=host-standin`.
 
 ### Added
 
@@ -19,6 +21,7 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 - Startup gating on arm state and readiness: monitor only while disarmed, and a latched `not_ready_at_arm` fault (#199).
 - Property tests for the parsing and decision paths, and cargo-fuzz targets for `read::apply`, MAVLink frames and the raw `COMMAND_ACK` reader, and config parsing, with a CI fuzz smoke job (#205).
 - CI jobs: a release build, an aarch64 (Jetson) cross-build, and a SITL smoke run against the stand-in peer (#206).
+- Simulated Jetson Orin Nano 8GB eval timing: `scripts/target-sim.sh` runs the aarch64 `rta-target` under qemu user mode and a scaled host model, 10,000 ticks each, with percentiles and a histogram, labelled `evidence=simulated`. `docs/target-timing.md` gives the assumptions and the board procedure. A CI `target-sim` smoke job.
 - `LICENSE` (Apache-2.0), `CONTRIBUTING.md`, this changelog, and `.gitignore`.
 - Process diagnostics from `rta-host` are single lines with a level and a component. `RTA_LOG` sets the lowest level shown (`docs/runtime.md`).
 

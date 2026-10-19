@@ -15,6 +15,7 @@ mod shadow;
 mod sitl;
 mod spec;
 mod startup;
+mod target;
 mod tracker;
 mod watchdog;
 mod weights;

@@ -6,6 +6,8 @@ These measurements are not claimed. The issues that owned them are closed with t
 
 Board: NVIDIA Jetson Orin Nano 8GB. Deadline: 5 ms. The host stand-in is in `docs/target.md`, dated 2026-10-09. Worst-case eval was 60.839 ms on the host. The deadline is not raised.
 
+Simulated timing does not close this hook. `docs/target-timing.md` holds qemu-aarch64 and host-model runs labelled `evidence=simulated`, and the steps for the board run.
+
 Hook: a 10-minute paced eval on the Orin, with CPU and a wattmeter power note, recorded in `docs/target.md` with a new date. If the worst case exceeds 5 ms, the deadline stays and a follow-up is opened. Do not quietly raise `deadline_ms`.
 
 ## Orin pipeline timing

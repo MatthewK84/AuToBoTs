@@ -22,7 +22,10 @@ bash scripts/coverage.sh
 bash scripts/sitl-trips.sh
 bash scripts/sitl.sh
 cargo build --locked --release --workspace
+TICKS=200 MODE=tight ALLOW_OVER=1 bash scripts/target-sim.sh qemu host-sim
 ```
+
+The last line needs `qemu-user`, `gcc-aarch64-linux-gnu` and `libc6-dev-arm64-cross`. It is a smoke check of the simulated-timing path, not timing evidence (`docs/target-timing.md`).
 
 Then `./scripts/wait-ci.sh` until CI is green.
 

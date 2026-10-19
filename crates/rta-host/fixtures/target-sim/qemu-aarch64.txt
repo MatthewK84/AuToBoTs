@@ -1,0 +1,16 @@
+# SIMULATED timing, not a measurement on the modelled board. See docs/target-timing.md.
+evidence=simulated measured_on=qemu-aarch64 models=jetson-orin-nano-8gb arch=aarch64 slowdown=1 date=2026-10-19 mode=paced samples=10000 period_ms=50 deadline_ms=5 raw_p50_us=54 raw_p90_us=81 raw_p99_us=119 raw_p999_us=271 raw_worst_us=675991 model_p50_us=54 model_p90_us=81 model_p99_us=119 model_p999_us=271 model_worst_us=675991 model_first_us=2466 model_worst_after_first_us=675991 over_deadline=1 wake_late_p99_us=411 wake_late_worst_us=5356537 cpu_pct=0.0 sched=other cpus=7 watchdog=mode Rtl decision=deadline-unchanged
+model_hist le_us=50 count=3888
+model_hist le_us=100 count=9709
+model_hist le_us=200 count=9986
+model_hist le_us=500 count=9993
+model_hist le_us=1000 count=9996
+model_hist le_us=2000 count=9996
+model_hist le_us=5000 count=9999
+model_hist le_us=10000 count=9999
+model_hist le_us=20000 count=9999
+model_hist le_us=50000 count=9999
+model_hist le_us=100000 count=9999
+model_hist le_us=200000 count=9999
+model_hist le_us=inf count=10000
+# run: chrt=denied taskset=7 mlockall=no emulator=qemu-aarch64_version_10.0.13_(Debian_1:10.0.13+ds-0+deb13u1)

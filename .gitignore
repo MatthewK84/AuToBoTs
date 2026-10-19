@@ -9,3 +9,7 @@
 /sitl-timing.txt
 # A local run of rta-host with config/example.toml.
 /rta.log
+# Scratch from scripts/target-sim.sh and rta-target, written at the repository root. The
+# committed artifacts under crates/rta-host/fixtures are not matched.
+/target-sim/
+/target-timing.txt
