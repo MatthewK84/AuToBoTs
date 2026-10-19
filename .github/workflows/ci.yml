@@ -54,6 +54,34 @@ jobs:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: cargo build --locked --release --workspace --target aarch64-unknown-linux-gnu
 
+  target-sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@18f0487477426dce244608110aa2660c2893deb7 # 1.98.1
+        with:
+          targets: aarch64-unknown-linux-gnu
+      - name: Install the aarch64 linker, target libc and qemu user mode
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user
+      # A smoke run of the simulated-timing path: it builds, runs under qemu-aarch64 and the
+      # host model, and labels its output simulated. Runner timing is not evidence either way
+      # (docs/target-timing.md).
+      - name: Simulated target timing smoke
+        env:
+          TICKS: "200"
+          MODE: tight
+          OUT_DIR: target-sim
+          ALLOW_OVER: "1"
+        run: bash scripts/target-sim.sh qemu host-sim
+      - name: Every artifact is labelled simulated
+        run: |
+          for file in target-sim/qemu-aarch64.txt target-sim/host-sim.txt; do
+            grep -q '^# SIMULATED' "$file"
+            grep -q '^evidence=simulated ' "$file"
+          done
+
   sitl:
     runs-on: ubuntu-latest
     steps:
