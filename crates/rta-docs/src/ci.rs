@@ -54,6 +54,7 @@ mod tests {
             "release",
             "aarch64",
             "target-sim",
+            "px4-sitl",
             "sitl",
             "deny",
             "coverage",
@@ -70,6 +71,7 @@ mod tests {
         assert!(CI.contains("bash scripts/sitl.sh"));
         assert!(CI.contains("bash scripts/sitl-trips.sh"));
         assert!(CI.contains("bash scripts/target-sim.sh qemu host-sim"));
+        assert!(CI.contains("bash scripts/sitl-px4.sh"));
         for item in [
             "There is no separate MSRV job",
             "persist-credentials: false",

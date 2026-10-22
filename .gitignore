@@ -12,4 +12,8 @@
 # Scratch from scripts/target-sim.sh and rta-target, written at the repository root. The
 # committed artifacts under crates/rta-host/fixtures are not matched.
 /target-sim/
+# Evidence from scripts/sitl-px4.sh; the committed copy is crates/rta-host/fixtures/px4-sitl.
+/sitl-px4/
 /target-timing.txt
+# Python bytecode from the SITL scripts.
+__pycache__/

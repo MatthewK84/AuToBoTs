@@ -22,6 +22,10 @@ pub const CLAIMS: &[Claim] = &[
         item: "scripts/sitl-trips.sh",
     },
     Claim {
+        column: Column::Shown,
+        item: "scripts/sitl-px4.sh",
+    },
+    Claim {
         column: Column::NotShown,
         item: "Target timing",
     },
