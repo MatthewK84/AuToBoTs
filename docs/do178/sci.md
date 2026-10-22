@@ -6,7 +6,7 @@ This is a configuration index. It names hashes, not floating branch tips. It is 
 
 | Item | Hash or version |
 | --- | --- |
-| Spec `spec/monitor.lola` | `ae398e85f30cd1e8723bbef36ad934b3651017e6d987eeedbc7fddf229bd6553` |
+| Spec `spec/monitor.lola` | `c5294c55a3e86a5bd3c679b2182fca3ffffb062c2dccd10fb3ece78bd8962862` |
 | Switch crate content | `8ef36e2c13b88ae726738d52da06723be20e7ad52127db46f0b8b069dfb052ac` |
 | Switch crate last change | `802feaa2f982b53f46f237e78804e47a4c014aff` |
 | Config `config/example.toml` | `747ff29188a50757aed426688ee7229695d09a62bdd8a947845bc67c3d2781db` |

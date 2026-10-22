@@ -40,7 +40,7 @@ fn host_has_no_threshold_literals() {
         include_str!("../../../rta-host/src/bin/rta-sitl.rs"),
     ]
     .concat();
-    for literal in ["500.0", "300.0", "1000.0", "0.40", "150.0"] {
+    for literal in ["500.0", "300.0", "1500.0", "0.40", "150.0"] {
         assert!(!host.contains(literal), "{literal}");
     }
     // A digit separator does not hide a copied comparison.
