@@ -22,6 +22,12 @@ pub struct Policy {
     pub initial_ms: u64,
     pub cap_ms: u64,
     pub attempts_per_step: u32,
+    /// After an `ACCEPTED` or `IN_PROGRESS` ack, the next resend waits at least this long.
+    /// The flight controller reports its mode only in `HEARTBEAT`, which PX4 sends at 1 Hz,
+    /// so a wait shorter than one heartbeat period resends a command that already took. The
+    /// runtime sets it to the spec's `heartbeat_stale` limit: no heartbeat in that window is
+    /// a stale link, which reverts on its own.
+    pub ack_hold_ms: u64,
 }
 
 impl Policy {
@@ -305,7 +311,10 @@ impl Latch {
         match result {
             // Accepted or still running: give the vehicle a full wait to report the mode.
             AckResult::Accepted | AckResult::InProgress => {
-                let wait = self.policy.wait_after(self.attempts);
+                let wait = self
+                    .policy
+                    .wait_after(self.attempts)
+                    .max(self.policy.ack_hold_ms);
                 self.next_due_ms = self.next_due_ms.max(now_ms.saturating_add(wait));
             }
             // Refused for good: the next step in the order is due at once.
@@ -361,6 +370,7 @@ mod tests {
         initial_ms: 300,
         cap_ms: 1_000,
         attempts_per_step: 3,
+        ack_hold_ms: 0,
     };
 
     /// Poll every millisecond from `from` to `to` and send whatever is due.
@@ -538,6 +548,42 @@ mod tests {
                 Some(Step::SetMode(RecoveryMode::Rtl))
             );
         }
+    }
+
+    #[test]
+    fn an_accepting_ack_holds_the_resend_for_the_heartbeat_window_when_that_is_longer() {
+        // PX4 reports a mode change only in its 1 Hz HEARTBEAT. The hold covers one beat.
+        let policy = Policy {
+            ack_hold_ms: 1_500,
+            ..POLICY
+        };
+        for result in [AckResult::Accepted, AckResult::InProgress] {
+            let mut latch = Latch::new(RecoveryMode::Rtl, policy);
+            latch.engage(0);
+            assert!(latch.poll(0, None).is_some());
+            latch.sent(0, true);
+            latch.on_ack(250, SET_MODE, result);
+            assert!(latch.poll(1_749, None).is_none(), "{result:?}");
+            assert_eq!(
+                latch.poll(1_750, None),
+                Some(Step::SetMode(RecoveryMode::Rtl))
+            );
+            // A heartbeat that shows the mode inside the hold confirms with no resend.
+            let mut latch = Latch::new(RecoveryMode::Rtl, policy);
+            latch.engage(0);
+            assert!(latch.poll(0, None).is_some());
+            latch.sent(0, true);
+            latch.on_ack(5, SET_MODE, result);
+            assert!(latch.poll(1_000, Some(RecoveryMode::Rtl)).is_none());
+            assert_eq!(latch.state(), State::Confirmed);
+        }
+        // A refusal is not held: it still resends on the schedule.
+        let mut latch = Latch::new(RecoveryMode::Rtl, policy);
+        latch.engage(0);
+        assert!(latch.poll(0, None).is_some());
+        latch.sent(0, true);
+        latch.on_ack(5, SET_MODE, AckResult::TemporarilyRejected);
+        assert!(latch.poll(300, None).is_some());
     }
 
     #[test]

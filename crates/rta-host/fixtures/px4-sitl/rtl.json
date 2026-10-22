@@ -1,0 +1,106 @@
+{
+ "evidence": "px4-sitl",
+ "hardware": false,
+ "note": "PX4 software in the loop with the SIH quadrotor model. Not hardware, not a flight test.",
+ "px4_tag": "v1.16.2",
+ "px4_commit": "54f0455ffcd755534539a7cf33a09a20bf71d29d",
+ "simulator": "SIH sihsim_quadx (PX4_SYS_AUTOSTART=10040), headless",
+ "rta_host_commit": "de6bf08",
+ "scenario": "rtl",
+ "recovery_mode": "rtl",
+ "vertical_cap_m": 5.0,
+ "expect": "AUTO.RTL",
+ "px4_reached_expected": true,
+ "arm_stdout": "",
+ "ticks": 454,
+ "disarmed_window_ticks": 99,
+ "disarmed_window_commands": [
+  "mode",
+  "setpoints"
+ ],
+ "disarmed_window_sends": 0,
+ "disarmed_window_gated": 99,
+ "sends": [
+  {
+   "tick": 287,
+   "step": "set_mode"
+  }
+ ],
+ "acks": [
+  "accepted"
+ ],
+ "first_tick": {
+  "heartbeat_stale": 1,
+  "recovery_pending": 287,
+  "fence_breach_tick": 287,
+  "recovery_confirmed": 297
+ },
+ "max_fc_heartbeat_age_ms": 1021.0,
+ "verdicts": [
+  "inhibit",
+  "revert"
+ ],
+ "log_excerpt": [
+  "tick=285 fence_ok=1 fc_heartbeat_age_ms=453 alt_m= verdict=inhibit reasons=weak_track,inside_commit,no_request command=setpoints",
+  "tick=286 fence_ok=1 fc_heartbeat_age_ms=503 alt_m= verdict=inhibit reasons=weak_track,inside_commit,no_request command=setpoints",
+  "tick=287 fence_ok=0 fc_heartbeat_age_ms=553 alt_m= verdict=revert reasons=weak_track,inside_commit,sent:set_mode,recovery_pending,attempts:1,step:set_mode command=mode",
+  "tick=288 fence_ok=0 fc_heartbeat_age_ms=603 alt_m= verdict=revert reasons=weak_track,inside_commit,latched,recovery_pending,attempts:1,step:set_mode,ack:accepted command=mode",
+  "tick=289 fence_ok=0 fc_heartbeat_age_ms=653 alt_m= verdict=revert reasons=weak_track,inside_commit,latched,recovery_pending,attempts:1,step:set_mode,ack:accepted command=mode",
+  "tick=290 fence_ok=0 fc_heartbeat_age_ms=703 alt_m= verdict=revert reasons=weak_track,inside_commit,latched,recovery_pending,attempts:1,step:set_mode,ack:accepted command=mode",
+  "tick=291 fence_ok=0 fc_heartbeat_age_ms=753 alt_m= verdict=revert reasons=weak_track,inside_commit,latched,recovery_pending,attempts:1,step:set_mode,ack:accepted command=mode",
+  "tick=292 fence_ok=0 fc_heartbeat_age_ms=803 alt_m= verdict=revert reasons=weak_track,inside_commit,latched,recovery_pending,attempts:1,step:set_mode,ack:accepted command=mode",
+  "tick=293 fence_ok=0 fc_heartbeat_age_ms=853 alt_m= verdict=revert reasons=weak_track,inside_commit,latched,recovery_pending,attempts:1,step:set_mode,ack:accepted command=mode",
+  "tick=294 fence_ok=0 fc_heartbeat_age_ms=903 alt_m= verdict=revert reasons=weak_track,inside_commit,latched,recovery_pending,attempts:1,step:set_mode,ack:accepted command=mode",
+  "tick=295 fence_ok=0 fc_heartbeat_age_ms=953 alt_m= verdict=revert reasons=weak_track,inside_commit,latched,recovery_pending,attempts:1,step:set_mode,ack:accepted command=mode",
+  "tick=296 fence_ok=0 fc_heartbeat_age_ms=1003 alt_m= verdict=revert reasons=weak_track,inside_commit,latched,recovery_pending,attempts:1,step:set_mode,ack:accepted command=mode",
+  "tick=297 fence_ok=0 fc_heartbeat_age_ms=32 alt_m= verdict=revert reasons=weak_track,inside_commit,latched,recovery_confirmed,attempts:1,step:set_mode,ack:accepted command=idle"
+ ],
+ "final_mode": "AUTO.RTL",
+ "px4_events": [
+  {
+   "t": 0.003,
+   "step": "rta-host started, vehicle disarmed"
+  },
+  {
+   "t": 0.476,
+   "heartbeat": "0x03040000",
+   "mode": "AUTO.LOITER",
+   "armed": false,
+   "alt_m": -0.01
+  },
+  {
+   "t": 5.004,
+   "step": "arm"
+  },
+  {
+   "t": 5.584,
+   "heartbeat": "0x03040000",
+   "mode": "AUTO.LOITER",
+   "armed": true,
+   "alt_m": 0.11
+  },
+  {
+   "t": 5.607,
+   "step": "takeoff"
+  },
+  {
+   "t": 6.606,
+   "heartbeat": "0x02040000",
+   "mode": "AUTO.TAKEOFF",
+   "armed": true,
+   "alt_m": 0.13
+  },
+  {
+   "t": 14.78,
+   "heartbeat": "0x05040000",
+   "mode": "AUTO.RTL",
+   "armed": true,
+   "alt_m": 5.65
+  },
+  {
+   "t": 22.787,
+   "step": "stop rta-host"
+  }
+ ],
+ "problems": []
+}

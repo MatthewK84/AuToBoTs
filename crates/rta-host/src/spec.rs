@@ -136,6 +136,30 @@ mod tests {
     }
 
     #[test]
+    fn a_1_hz_flight_controller_heartbeat_with_jitter_is_fresh_and_one_missed_beat_is_stale() {
+        // PX4 sends HEARTBEAT at 1 Hz on the onboard link. The age the tick sees runs up to
+        // one period plus jitter between beats; PX4 SITL v1.16.2 reached 1014 ms. A limit of
+        // one period reverted a healthy vehicle within seconds of arming. One missed beat
+        // takes the age to two periods.
+        use crate::eval::Evaluator;
+        use crate::monitor::build_once;
+        use rta_spec::{InputRecord, Verdict};
+        let text = include_str!("../../../spec/monitor.lola");
+        let verdict = |age: f64| {
+            let mut built = build_once(text).expect("spec");
+            let record =
+                InputRecord::try_new(30.0, true, 10.0, 0.9, 400.0, 10.0, age).expect("record");
+            Evaluator::default().tick(&mut built, &record, 1).verdict
+        };
+        for healthy in [1_000.0, 1_014.0, 1_100.0, 1_250.0] {
+            assert_eq!(verdict(healthy), Verdict::Pass, "{healthy}");
+        }
+        let limit = limits(text).expect("limits").heartbeat_stale_ms;
+        assert!(limit < 2_000.0, "{limit}: one missed beat must trip");
+        assert_eq!(verdict(2_000.0), Verdict::Revert);
+    }
+
+    #[test]
     fn a_changed_spec_threshold_moves_the_host_limit() {
         let text = include_str!("../../../spec/monitor.lola");
         let line = text

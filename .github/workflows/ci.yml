@@ -82,6 +82,23 @@ jobs:
             grep -q '^evidence=simulated ' "$file"
           done
 
+  px4-sitl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@18f0487477426dce244608110aa2660c2893deb7 # 1.98.1
+      - name: Install the PX4 SITL build tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake ninja-build python3-venv python3-dev
+      # Real PX4 v1.16.2 software in the loop, SIH model, headless: clone, build, and the
+      # scenarios in docs/sitl.md. Not hardware.
+      - name: rta-host against PX4 SITL
+        env:
+          OUT_DIR: sitl-px4
+        run: bash scripts/sitl-px4.sh
+
   sitl:
     runs-on: ubuntu-latest
     steps:

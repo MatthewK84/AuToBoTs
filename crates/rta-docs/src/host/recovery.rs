@@ -88,6 +88,7 @@ fn the_default_order_gives_up_when_the_note_says() {
         initial_ms: example.recovery.retry_initial_ms,
         cap_ms: example.recovery.retry_cap_ms,
         attempts_per_step: example.recovery.attempts_per_step,
+        ack_hold_ms: 0,
     };
     let sends =
         u32::try_from(fallback_order(RecoveryMode::Rtl).len()).unwrap() * policy.attempts_per_step;

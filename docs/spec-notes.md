@@ -12,7 +12,7 @@ Thresholds live in `spec/monitor.lola` and in this file. A change edits both. Th
 | range_m | H5 | m | input | Range presented to the spec. A held-out range is not this field. |
 | fix_stale | H2 | ms | 500 | A fix older than half a second is not a commit source. |
 | link_stale | H3 | ms | 300 | Command link older than several ticks. |
-| heartbeat_stale | H4 | ms | 1000 | One missed flight-controller heartbeat at 1 Hz. |
+| heartbeat_stale | H4 | ms | 1500 | One missed flight-controller heartbeat at 1 Hz: a beat is due every 1000 ms, so a normal stream reaches an age of 1000 ms plus jitter. PX4 SITL v1.16.2 measured 1014 ms (`docs/sitl.md`). 1500 trips half a period after a missed beat. |
 | weak_track | H5 | confidence | 0.40 | Below this, a track inside commit range inhibits. |
 | inside_commit | H5 | m | 150 | Commit range. Not a fence. |
 | revert | H1-H4 | bool | fence or any stale stream | Revert beats inhibit. |

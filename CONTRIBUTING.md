@@ -27,6 +27,8 @@ TICKS=200 MODE=tight ALLOW_OVER=1 bash scripts/target-sim.sh qemu host-sim
 
 The last line needs `qemu-user`, `gcc-aarch64-linux-gnu` and `libc6-dev-arm64-cross`. It is a smoke check of the simulated-timing path, not timing evidence (`docs/target-timing.md`).
 
+CI also runs `bash scripts/sitl-px4.sh` (PX4 SITL, about 5 minutes the first time; needs `cmake`, `ninja-build` and `python3-venv`). Run it before a change to the runtime, the recovery latch, the gate or the spec.
+
 Then `./scripts/wait-ci.sh` until CI is green.
 
 A change to a timing-sensitive path (the runtime loop, the worker, the watchdog, the recovery latch) should also be stress-run. Run the test binaries repeatedly, idle and under CPU load, and post the pass counts on the pull request.

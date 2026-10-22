@@ -1,0 +1,300 @@
+{
+ "evidence": "px4-sitl",
+ "hardware": false,
+ "note": "PX4 software in the loop with the SIH quadrotor model. Not hardware, not a flight test.",
+ "px4_tag": "v1.16.2",
+ "px4_commit": "54f0455ffcd755534539a7cf33a09a20bf71d29d",
+ "simulator": "SIH sihsim_quadx (PX4_SYS_AUTOSTART=10040), headless",
+ "rta_host_commit": "de6bf08",
+ "scenario": "probe",
+ "steps": [
+  {
+   "step": "do_set_mode_rtl_twice",
+   "sent_t": 10.56,
+   "acks": [
+    {
+     "t": 10.564,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 10.564,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 10.572,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 10.573,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.RTL",
+   "heartbeat_shows_mode_after_s": 1.002
+  },
+  {
+   "step": "do_set_mode_rtl_while_in_rtl",
+   "sent_t": 11.562,
+   "acks": [
+    {
+     "t": 11.567,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 11.575,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.RTL",
+   "heartbeat_shows_mode_after_s": null
+  },
+  {
+   "step": "nav_land_nan",
+   "sent_t": 12.564,
+   "acks": [
+    {
+     "t": 12.572,
+     "command": 21,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.LAND",
+   "heartbeat_shows_mode_after_s": 1.001
+  },
+  {
+   "step": "nav_return_to_launch",
+   "sent_t": 13.565,
+   "acks": [
+    {
+     "t": 13.577,
+     "command": 20,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.RTL",
+   "heartbeat_shows_mode_after_s": 1.002
+  },
+  {
+   "step": "do_set_mode_unknown_sub_mode",
+   "sent_t": 14.567,
+   "acks": [
+    {
+     "t": 14.571,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 14.583,
+     "command": 176,
+     "result": 1
+    }
+   ],
+   "mode_after": "AUTO.RTL",
+   "heartbeat_shows_mode_after_s": null
+  },
+  {
+   "step": "latency_0",
+   "sent_t": 16.069,
+   "acks": [
+    {
+     "t": 16.073,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 16.073,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.LOITER",
+   "heartbeat_shows_mode_after_s": 0.764
+  },
+  {
+   "step": "latency_1",
+   "sent_t": 17.534,
+   "acks": [
+    {
+     "t": 17.538,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 17.546,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.RTL",
+   "heartbeat_shows_mode_after_s": 0.322
+  },
+  {
+   "step": "latency_2",
+   "sent_t": 18.56,
+   "acks": [
+    {
+     "t": 18.564,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 18.568,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.LOITER",
+   "heartbeat_shows_mode_after_s": 0.319
+  },
+  {
+   "step": "latency_3",
+   "sent_t": 19.58,
+   "acks": [
+    {
+     "t": 19.584,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 19.588,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.RTL",
+   "heartbeat_shows_mode_after_s": 0.322
+  },
+  {
+   "step": "latency_4",
+   "sent_t": 20.604,
+   "acks": [
+    {
+     "t": 20.608,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 20.616,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.LOITER",
+   "heartbeat_shows_mode_after_s": 0.319
+  },
+  {
+   "step": "latency_5",
+   "sent_t": 21.623,
+   "acks": [
+    {
+     "t": 21.627,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 21.635,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.RTL",
+   "heartbeat_shows_mode_after_s": 0.323
+  },
+  {
+   "step": "latency_6",
+   "sent_t": 22.65,
+   "acks": [
+    {
+     "t": 22.654,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 22.667,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.LOITER",
+   "heartbeat_shows_mode_after_s": 0.319
+  },
+  {
+   "step": "latency_7",
+   "sent_t": 23.671,
+   "acks": [
+    {
+     "t": 23.675,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 23.683,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.RTL",
+   "heartbeat_shows_mode_after_s": 0.322
+  },
+  {
+   "step": "latency_8",
+   "sent_t": 24.695,
+   "acks": [
+    {
+     "t": 24.699,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 24.699,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.LOITER",
+   "heartbeat_shows_mode_after_s": 0.319
+  },
+  {
+   "step": "latency_9",
+   "sent_t": 25.717,
+   "acks": [
+    {
+     "t": 25.721,
+     "command": 176,
+     "result": 0
+    },
+    {
+     "t": 25.73,
+     "command": 176,
+     "result": 0
+    }
+   ],
+   "mode_after": "AUTO.RTL",
+   "heartbeat_shows_mode_after_s": 0.319
+  }
+ ],
+ "heartbeat_interval_s": {
+  "min": 1.02,
+  "max": 1.025,
+  "count": 25
+ },
+ "mode_change_to_heartbeat_s": [
+  0.764,
+  0.322,
+  0.319,
+  0.322,
+  0.319,
+  0.323,
+  0.319,
+  0.322,
+  0.319,
+  0.319
+ ],
+ "problems": []
+}

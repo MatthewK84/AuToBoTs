@@ -10,6 +10,7 @@ Two workflows: `.github/workflows/ci.yml` on every push and pull request, and `.
 | `release` | `cargo build --locked --release --workspace`: the flight profile, `panic = "abort"` | 1.98.1 |
 | `aarch64` | The same release build for `aarch64-unknown-linux-gnu`, the Jetson triple, linked with `gcc-aarch64-linux-gnu` against `libc6-dev-arm64-cross`. A cross-build check, not a run on the board | 1.98.1 |
 | `target-sim` | `scripts/target-sim.sh qemu host-sim`, 200 tight evaluations each: the aarch64 `rta-target` under `qemu-aarch64` user mode and the host slowdown model. A smoke check that the simulated-timing path builds and labels its output `evidence=simulated`. Runner timing is not evidence, so an over-deadline sample does not fail it (`docs/target-timing.md`) | 1.98.1 |
+| `px4-sitl` | `scripts/sitl-px4.sh`: clones and builds PX4-Autopilot v1.16.2 SITL (pinned commit), runs `rta-host` against it headless with the SIH quadrotor, and checks the startup gate, fence breach to AUTO.RTL, AUTO.LOITER and AUTO.LAND, a late start, and PX4's own ACKs (`docs/sitl.md`). About 5 minutes, no cache. PX4 SITL, not hardware | 1.98.1 |
 | `sitl` | `scripts/sitl-trips.sh` and `scripts/sitl.sh` against the stand-in peer. `PX4_DIR` is unset, so no PX4 binary runs | 1.98.1 |
 | `deny` | `cargo deny check` | action's own |
 | `coverage` | `scripts/coverage.sh`, the switch coverage gate | 1.98.1 |

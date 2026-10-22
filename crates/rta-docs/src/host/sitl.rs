@@ -87,3 +87,61 @@ fn the_cbf_contract_names_the_margin_and_the_log_field() {
     assert!(note.contains("unmeasured"));
     assert!(note.contains("filter_intervened"));
 }
+
+/// The PX4 SITL evidence is labelled PX4 SITL, matches the pinned PX4 in the script, and the
+/// note says what each scenario showed and that none of it is hardware.
+#[test]
+fn the_px4_sitl_evidence_is_labelled_pinned_and_described() {
+    let script = include_str!("../../../../scripts/sitl-px4.sh");
+    let runner = include_str!("../../../../scripts/sitl_px4.py");
+    let note = include_str!("../../../../docs/sitl.md");
+    let tag = "v1.16.2";
+    let commit = "54f0455ffcd755534539a7cf33a09a20bf71d29d";
+    assert!(script.contains(&format!("PX4_TAG={tag}")));
+    assert!(script.contains(&format!("PX4_COMMIT={commit}")));
+    assert!(script.contains("px4_sitl_default"));
+    assert!(runner.contains("PX4_SYS_AUTOSTART=\"10040\""));
+    assert!(runner.contains("udpin:127.0.0.1:14540"));
+    for item in [
+        tag,
+        commit,
+        "SIH",
+        "headless",
+        "**This is PX4 SITL, not hardware and not a flight test.**",
+        "0x05040000",
+        "0x03040000",
+        "0x06040000",
+        "gate-heartbeat-limit-1000ms.json",
+    ] {
+        assert!(note.contains(item), "{item}");
+    }
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../rta-host/fixtures/px4-sitl");
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        assert!(text.contains("\"evidence\": \"px4-sitl\""), "{name}");
+        assert!(text.contains("\"hardware\": false"), "{name}");
+        assert!(text.contains(&format!("\"px4_tag\": \"{tag}\"")), "{name}");
+        assert!(
+            text.contains(&format!("\"px4_commit\": \"{commit}\"")),
+            "{name}"
+        );
+        // A current run passes; the one record of the old heartbeat limit shows the false trip.
+        if name == "gate-heartbeat-limit-1000ms.json" {
+            assert!(
+                text.contains("rta-host sent recovery in a nominal flight"),
+                "{name}"
+            );
+        } else {
+            assert!(text.contains("\"problems\": []"), "{name}");
+        }
+        names.push(name);
+    }
+    for scenario in ["gate", "rtl", "loiter", "land", "late_start", "probe"] {
+        assert!(names.contains(&format!("{scenario}.json")), "{scenario}");
+        assert!(note.contains(&format!("| `{scenario}` |")), "{scenario}");
+    }
+}

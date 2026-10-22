@@ -1,0 +1,85 @@
+{
+ "evidence": "px4-sitl",
+ "hardware": false,
+ "note": "PX4 software in the loop with the SIH quadrotor model. Not hardware, not a flight test.",
+ "px4_tag": "v1.16.2",
+ "px4_commit": "54f0455ffcd755534539a7cf33a09a20bf71d29d",
+ "simulator": "SIH sihsim_quadx (PX4_SYS_AUTOSTART=10040), headless",
+ "rta_host_commit": "de6bf08",
+ "scenario": "gate",
+ "recovery_mode": "rtl",
+ "vertical_cap_m": 120.0,
+ "expect": "AUTO.LOITER",
+ "px4_reached_expected": true,
+ "arm_stdout": "",
+ "ticks": 556,
+ "disarmed_window_ticks": 99,
+ "disarmed_window_commands": [
+  "mode",
+  "setpoints"
+ ],
+ "disarmed_window_sends": 0,
+ "disarmed_window_gated": 99,
+ "sends": [],
+ "acks": [],
+ "first_tick": {
+  "heartbeat_stale": 1
+ },
+ "max_fc_heartbeat_age_ms": 1022.0,
+ "verdicts": [
+  "inhibit"
+ ],
+ "log_excerpt": [
+  "tick=554 fence_ok=1 fix_age_ms=6 link_age_ms=6 fc_heartbeat_age_ms=587 track_conf=0 range_m=0 verdict=inhibit filter_intervened=0 reasons=weak_track,inside_commit,no_request command=setpoints eval_ms=0 spec_hash=082537df5ad7d062 indication=",
+  "tick=555 fence_ok=1 fix_age_ms=24 link_age_ms=3 fc_heartbeat_age_ms=637 track_conf=0 range_m=0 verdict=inhibit filter_intervened=0 reasons=weak_track,inside_commit,no_request command=setpoints eval_ms=0 spec_hash=082537df5ad7d062 indication=",
+  "tick=556 fence_ok=1 fix_age_ms=4 link_age_ms=4 fc_heartbeat_age_ms=687 track_conf=0 range_m=0 verdict=inhibit filter_intervened=0 reasons=weak_track,inside_commit,no_request command=setpoints eval_ms=0 spec_hash=082537df5ad7d062 indication="
+ ],
+ "final_mode": "AUTO.LOITER",
+ "px4_events": [
+  {
+   "t": 0.003,
+   "step": "rta-host started, vehicle disarmed"
+  },
+  {
+   "t": 0.485,
+   "heartbeat": "0x03040000",
+   "mode": "AUTO.LOITER",
+   "armed": false,
+   "alt_m": -0.02
+  },
+  {
+   "t": 5.004,
+   "step": "arm"
+  },
+  {
+   "t": 5.59,
+   "heartbeat": "0x03040000",
+   "mode": "AUTO.LOITER",
+   "armed": true,
+   "alt_m": 0.11
+  },
+  {
+   "t": 5.607,
+   "step": "takeoff"
+  },
+  {
+   "t": 6.611,
+   "heartbeat": "0x02040000",
+   "mode": "AUTO.TAKEOFF",
+   "armed": true,
+   "alt_m": 0.12
+  },
+  {
+   "t": 17.853,
+   "heartbeat": "0x03040000",
+   "mode": "AUTO.LOITER",
+   "armed": true,
+   "alt_m": 9.93
+  },
+  {
+   "t": 27.855,
+   "step": "stop rta-host"
+  }
+ ],
+ "problems": []
+}

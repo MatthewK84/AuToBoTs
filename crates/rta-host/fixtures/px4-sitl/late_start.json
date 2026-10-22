@@ -1,0 +1,76 @@
+{
+ "evidence": "px4-sitl",
+ "hardware": false,
+ "note": "PX4 software in the loop with the SIH quadrotor model. Not hardware, not a flight test.",
+ "px4_tag": "v1.16.2",
+ "px4_commit": "54f0455ffcd755534539a7cf33a09a20bf71d29d",
+ "simulator": "SIH sihsim_quadx (PX4_SYS_AUTOSTART=10040), headless",
+ "rta_host_commit": "de6bf08",
+ "scenario": "late_start",
+ "recovery_mode": "rtl",
+ "vertical_cap_m": 120.0,
+ "expect": "AUTO.LOITER",
+ "px4_reached_expected": true,
+ "arm_stdout": "",
+ "ticks": 199,
+ "disarmed_window_ticks": 0,
+ "disarmed_window_commands": [],
+ "disarmed_window_sends": 0,
+ "disarmed_window_gated": 0,
+ "sends": [],
+ "acks": [],
+ "first_tick": {
+  "heartbeat_stale": 1
+ },
+ "max_fc_heartbeat_age_ms": 1035.0,
+ "verdicts": [
+  "inhibit",
+  "revert"
+ ],
+ "log_excerpt": [
+  "tick=197 fence_ok=1 fix_age_ms=31 link_age_ms=7 fc_heartbeat_age_ms=612 track_conf=0 range_m=0 verdict=inhibit filter_intervened=0 reasons=weak_track,inside_commit,no_request command=setpoints eval_ms=0 spec_hash=082537df5ad7d062 indication=",
+  "tick=198 fence_ok=1 fix_age_ms=12 link_age_ms=8 fc_heartbeat_age_ms=662 track_conf=0 range_m=0 verdict=inhibit filter_intervened=0 reasons=weak_track,inside_commit,no_request command=setpoints eval_ms=0 spec_hash=082537df5ad7d062 indication=",
+  "tick=199 fence_ok=1 fix_age_ms=29 link_age_ms=4 fc_heartbeat_age_ms=712 track_conf=0 range_m=0 verdict=inhibit filter_intervened=0 reasons=weak_track,inside_commit,no_request command=setpoints eval_ms=0 spec_hash=082537df5ad7d062 indication="
+ ],
+ "final_mode": "AUTO.LOITER",
+ "px4_events": [
+  {
+   "t": 0.003,
+   "step": "arm"
+  },
+  {
+   "t": 0.481,
+   "heartbeat": "0x03040000",
+   "mode": "AUTO.LOITER",
+   "armed": true,
+   "alt_m": -0.02
+  },
+  {
+   "t": 0.506,
+   "step": "takeoff"
+  },
+  {
+   "t": 1.502,
+   "heartbeat": "0x02040000",
+   "mode": "AUTO.TAKEOFF",
+   "armed": true,
+   "alt_m": 0.02
+  },
+  {
+   "t": 13.777,
+   "heartbeat": "0x03040000",
+   "mode": "AUTO.LOITER",
+   "armed": true,
+   "alt_m": 9.58
+  },
+  {
+   "t": 13.792,
+   "step": "rta-host started, vehicle armed and holding"
+  },
+  {
+   "t": 23.815,
+   "step": "stop rta-host"
+  }
+ ],
+ "problems": []
+}

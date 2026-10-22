@@ -6,6 +6,8 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Fixed
 
+- `heartbeat_stale` is 1500 ms, not 1000 ms. PX4's 1 Hz onboard heartbeat reached an age of 1014 to 1035 ms between healthy beats, so the spec reverted a healthy vehicle; against PX4 SITL it sent RTL 2 s after takeoff.
+- After an `ACCEPTED` or `IN_PROGRESS` ack the next resend waits at least the `heartbeat_stale` limit, since PX4 reports the new mode only in its 1 Hz heartbeat. A 500 ms hold resent a `DO_SET_MODE` that had already taken.
 - PX4 recovery-mode encoding: `DO_SET_MODE` sends AUTO with the RTL, loiter, or land sub-mode, and `HEARTBEAT.custom_mode` is decoded as PX4 packs it (#195).
 - `decide_input` fails closed on non-finite energy, proved with Kani (#201).
 - Setpoints are position and yaw only (`type_mask` `0x09F8`), with yaw passed through, `time_boot_ms` from the monotonic run clock, and the target system and component from the heard flight-controller heartbeat. `COMMAND_ACK` counts only from that system and component (#204).
@@ -22,6 +24,7 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 - Property tests for the parsing and decision paths, and cargo-fuzz targets for `read::apply`, MAVLink frames and the raw `COMMAND_ACK` reader, and config parsing, with a CI fuzz smoke job (#205).
 - CI jobs: a release build, an aarch64 (Jetson) cross-build, and a SITL smoke run against the stand-in peer (#206).
 - Simulated Jetson Orin Nano 8GB eval timing: `scripts/target-sim.sh` runs the aarch64 `rta-target` under qemu user mode and a scaled host model, 10,000 ticks each, with percentiles and a histogram, labelled `evidence=simulated`. `docs/target-timing.md` gives the assumptions and the board procedure. A CI `target-sim` smoke job.
+- `scripts/sitl-px4.sh`: `rta-host` against real PX4 v1.16.2 SITL (SIH, headless), with the startup gate, fence breach to RTL, loiter and land, a late start, and a probe of PX4's ACKs. Evidence in `crates/rta-host/fixtures/px4-sitl`, labelled PX4 SITL, not hardware. CI job `px4-sitl`.
 - `LICENSE` (Apache-2.0), `CONTRIBUTING.md`, this changelog, and `.gitignore`.
 - Process diagnostics from `rta-host` are single lines with a level and a component. `RTA_LOG` sets the lowest level shown (`docs/runtime.md`).
 
