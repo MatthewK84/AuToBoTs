@@ -82,6 +82,25 @@ mod tests {
     }
 
     #[test]
+    fn the_px4_sitl_job_installs_the_pinned_toolchain_once_and_the_script_names_it() {
+        let toolchain = include_str!("../../../rust-toolchain.toml");
+        let channel = toolchain
+            .lines()
+            .find_map(|line| line.strip_prefix("channel = "))
+            .unwrap()
+            .trim_matches('"');
+        let job = CI.split("\n  px4-sitl:\n").nth(1).unwrap();
+        let job = job.split("\n\n  ").next().unwrap();
+        assert!(job.contains(&format!(
+            "rustup toolchain install {channel} --profile minimal --no-self-update"
+        )));
+        assert!(!job.contains("dtolnay/rust-toolchain"), "{job}");
+        let script = include_str!("../../../scripts/sitl-px4.sh");
+        assert!(script.contains("RUSTUP_TOOLCHAIN=\"$toolchain\" cargo build"));
+        assert!(script.contains("rev-parse --verify -q \"$PX4_TAG^{commit}\""));
+    }
+
+    #[test]
     fn every_crate_declares_the_pinned_toolchain_as_its_minimum() {
         let toolchain = include_str!("../../../rust-toolchain.toml");
         let channel = toolchain
