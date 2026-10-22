@@ -38,7 +38,7 @@ The receive thread reads `COMMAND_ACK` (id 77) from its raw payload. The common 
 
 | Result | Action | Log code |
 | --- | --- | --- |
-| `ACCEPTED` | Not a confirmation. Holds the next resend until one full wait after the ack, so the vehicle has time to report the mode. | `ack:accepted` |
+| `ACCEPTED` | Not a confirmation. Holds the next resend until one full wait after the ack, or the spec's `heartbeat_stale` limit after it if that is longer, so the vehicle has time to report the mode. PX4 reports a mode only in its 1 Hz `HEARTBEAT`; against PX4 SITL the heartbeat showed the new mode up to about 1 s after the ack, and a 500 ms hold resent a `DO_SET_MODE` that had already taken (`docs/sitl.md`). | `ack:accepted` |
 | `IN_PROGRESS` | Same as accepted. | `ack:in_progress` |
 | `TEMPORARILY_REJECTED` | Resend on the schedule. | `ack:temporarily_rejected` |
 | `FAILED` | Resend on the schedule. | `ack:failed` |

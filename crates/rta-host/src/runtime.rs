@@ -189,11 +189,21 @@ pub fn ready(config: &Config, vehicle: &Vehicle, now_ms: u64) -> bool {
             .is_some_and(|at| now_ms.saturating_sub(at) <= config.startup.ready_fix_age_ms)
 }
 
-pub fn policy_of(config: &Config) -> Policy {
+/// The resend schedule. `heartbeat_stale_ms` is the spec's limit (`spec::limits`): after an
+/// accepting ack the next resend waits at least that long for a heartbeat to show the mode.
+pub fn policy_of(config: &Config, heartbeat_stale_ms: f64) -> Policy {
+    // A spec limit is a finite, non-negative number (`spec::limits`); anything else holds 0.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let ack_hold_ms = if heartbeat_stale_ms.is_finite() && heartbeat_stale_ms > 0.0 {
+        heartbeat_stale_ms.ceil() as u64
+    } else {
+        0
+    };
     Policy {
         initial_ms: config.recovery.retry_initial_ms,
         cap_ms: config.recovery.retry_cap_ms,
         attempts_per_step: config.recovery.attempts_per_step,
+        ack_hold_ms,
     }
 }
 
@@ -355,7 +365,10 @@ pub fn run<W: Write>(
         vehicle: Mutex::new(Vehicle::default()),
         stop: Arc::clone(&options.stop),
         published_ms: AtomicU64::new(0),
-        recovery: Mutex::new(Latch::new(recovery, policy_of(config))),
+        recovery: Mutex::new(Latch::new(
+            recovery,
+            policy_of(config, options.limits.heartbeat_stale_ms),
+        )),
         watchdog_fired: AtomicBool::new(false),
         gate_open: AtomicBool::new(false),
     });
@@ -1379,7 +1392,10 @@ ready_fix_age_ms = 200
     }
 
     fn test_policy() -> Policy {
-        policy_of(&config(1, "unused.log"))
+        policy_of(
+            &config(1, "unused.log"),
+            crate::spec::limits(SPEC).unwrap().heartbeat_stale_ms,
+        )
     }
 
     fn tick_lines(text: &str) -> Vec<&str> {
@@ -1504,7 +1520,7 @@ ready_fix_age_ms = 200
             "accepted",
             Px4::Ignore(Some(MavResult::MAV_RESULT_ACCEPTED)),
             |_| {},
-            25,
+            50,
             &mut StubComplex,
         );
         let sends = seen.recovery();
@@ -1514,6 +1530,18 @@ ready_fix_age_ms = 200
         assert_eq!(seen.set_mode.len(), 2, "{text}");
         let policy = test_policy();
         assert_never_early(|n| policy.wait_after(n), &sends);
+        // Every send here was accepted, so each resend waited for a heartbeat to show the
+        // mode: at least the hold, which is longer than one 1 Hz heartbeat period. PX4 SITL
+        // reports a mode change in HEARTBEAT up to a second after it accepts it.
+        assert!(policy.ack_hold_ms > 1_000, "{policy:?}");
+        let hold = Duration::from_millis(policy.ack_hold_ms);
+        for pair in sends.windows(2) {
+            let gap = pair[1].1.duration_since(pair[0].1);
+            assert!(
+                gap + ARRIVAL_SLACK >= hold,
+                "resend {gap:?} after an accepted ack: {sends:?}"
+            );
+        }
         assert!(!report.recovery_confirmed);
         let lines = tick_lines(&text);
         assert!(
