@@ -678,6 +678,7 @@ mod tests {
     use super::*;
     use crate::command_out::{custom_mode, PX4_MAIN_MODE_AUTO, PX4_SUB_MODE_AUTO_RTL};
     use crate::eval_worker::{Evaluate, SpecEvaluator};
+    use crate::host_pause;
     use crate::link::{open, Endpoint};
     use crate::mavlink_link::decode_each;
     use crate::monitor::build_once;
@@ -1038,69 +1039,71 @@ ready_fix_age_ms = 200
 
     #[test]
     fn loop_reverts_on_a_fence_breach_and_sends_px4_auto_rtl() {
-        let fc = FakeFc::bind();
-        let path = log_path("fence");
-        let config = config(fc.port(), path.to_str().unwrap());
-        let link = host_link(&fc);
-        let fc_thread = fc.spawn(loopback(&link));
-        let position = Arc::clone(&fc.position);
-        let breach = thread::spawn(move || {
-            thread::sleep(Duration::from_millis(900));
-            *lock(&position) = (600.0, 600.0, -30.0);
+        host_pause::guard(|| {
+            let fc = FakeFc::bind();
+            let path = log_path("fence");
+            let config = config(fc.port(), path.to_str().unwrap());
+            let link = host_link(&fc);
+            let fc_thread = fc.spawn(loopback(&link));
+            let position = Arc::clone(&fc.position);
+            let breach = thread::spawn(move || {
+                thread::sleep(Duration::from_millis(900));
+                *lock(&position) = (600.0, 600.0, -30.0);
+            });
+            let worker = spec_worker();
+            let mut log = TickLog::open(&path, config.log.flush_every_n, 7).unwrap();
+            let report = run(
+                &config,
+                worker,
+                &mut log,
+                7,
+                link,
+                &mut StubComplex,
+                options(20),
+            )
+            .unwrap();
+            breach.join().unwrap();
+            thread::sleep(Duration::from_millis(100));
+            fc.stop.store(true, Ordering::SeqCst);
+            fc_thread.join().unwrap();
+
+            assert_eq!(report.ticks, 20);
+            assert!(report.recovery_sent);
+            assert!(!report.watchdog_fired);
+            let seen = lock(&fc.seen);
+            assert!(seen.heartbeats >= 1, "{seen:?}");
+            // StubComplex asks for nothing, so no zero setpoint is forwarded.
+            assert_eq!(seen.setpoints, 0, "{seen:?}");
+            // One recovery, AUTO + RTL sub-mode, then silence: the fake reports AUTO_RTL after.
+            assert_eq!(seen.set_mode.len(), 1, "{seen:?}");
+            let (param1, param2, param3, _) = seen.set_mode[0];
+            assert_eq!(param1, 1.0);
+            assert_eq!(param2, f32::from(PX4_MAIN_MODE_AUTO));
+            assert_eq!(param3, f32::from(PX4_SUB_MODE_AUTO_RTL));
+
+            let text = std::fs::read_to_string(&path).unwrap();
+            let lines: Vec<&str> = text.lines().collect();
+            assert!(lines[0].starts_with("# rta-log 1 spec_hash=0000000000000007"));
+            assert_eq!(lines.len(), 21, "{text}");
+            // Before the breach: fresh samples inside the fence, no tracker, so inhibit.
+            assert!(
+                lines.iter().any(|line| line.contains("fence_ok=1")
+                    && line.contains("verdict=inhibit")
+                    && line.contains("command=setpoints")),
+                "{text}"
+            );
+            // The breach tick: fence_ok goes to 0, Revert, one mode command.
+            let breach_line = lines
+                .iter()
+                .skip(1)
+                .find(|line| line.contains("fence_ok=0") && !line.contains("no_fc"))
+                .unwrap_or_else(|| panic!("{text}"));
+            assert!(breach_line.contains("verdict=revert"), "{breach_line}");
+            assert!(breach_line.contains("command=mode"), "{breach_line}");
+            // After the flight controller reports AUTO_RTL, a revert tick sends nothing.
+            assert!(lines.last().unwrap().contains("command=idle"), "{text}");
+            let _ = std::fs::remove_file(&path);
         });
-        let worker = spec_worker();
-        let mut log = TickLog::open(&path, config.log.flush_every_n, 7).unwrap();
-        let report = run(
-            &config,
-            worker,
-            &mut log,
-            7,
-            link,
-            &mut StubComplex,
-            options(20),
-        )
-        .unwrap();
-        breach.join().unwrap();
-        thread::sleep(Duration::from_millis(100));
-        fc.stop.store(true, Ordering::SeqCst);
-        fc_thread.join().unwrap();
-
-        assert_eq!(report.ticks, 20);
-        assert!(report.recovery_sent);
-        assert!(!report.watchdog_fired);
-        let seen = lock(&fc.seen);
-        assert!(seen.heartbeats >= 1, "{seen:?}");
-        // StubComplex asks for nothing, so no zero setpoint is forwarded.
-        assert_eq!(seen.setpoints, 0, "{seen:?}");
-        // One recovery, AUTO + RTL sub-mode, then silence: the fake reports AUTO_RTL after.
-        assert_eq!(seen.set_mode.len(), 1, "{seen:?}");
-        let (param1, param2, param3, _) = seen.set_mode[0];
-        assert_eq!(param1, 1.0);
-        assert_eq!(param2, f32::from(PX4_MAIN_MODE_AUTO));
-        assert_eq!(param3, f32::from(PX4_SUB_MODE_AUTO_RTL));
-
-        let text = std::fs::read_to_string(&path).unwrap();
-        let lines: Vec<&str> = text.lines().collect();
-        assert!(lines[0].starts_with("# rta-log 1 spec_hash=0000000000000007"));
-        assert_eq!(lines.len(), 21, "{text}");
-        // Before the breach: fresh samples inside the fence, no tracker, so inhibit.
-        assert!(
-            lines.iter().any(|line| line.contains("fence_ok=1")
-                && line.contains("verdict=inhibit")
-                && line.contains("command=setpoints")),
-            "{text}"
-        );
-        // The breach tick: fence_ok goes to 0, Revert, one mode command.
-        let breach_line = lines
-            .iter()
-            .skip(1)
-            .find(|line| line.contains("fence_ok=0") && !line.contains("no_fc"))
-            .unwrap_or_else(|| panic!("{text}"));
-        assert!(breach_line.contains("verdict=revert"), "{breach_line}");
-        assert!(breach_line.contains("command=mode"), "{breach_line}");
-        // After the flight controller reports AUTO_RTL, a revert tick sends nothing.
-        assert!(lines.last().unwrap().contains("command=idle"), "{text}");
-        let _ = std::fs::remove_file(&path);
     }
 
     /// A complex function that blocks the tick thread once.
@@ -1125,49 +1128,51 @@ ready_fix_age_ms = 200
 
     #[test]
     fn watchdog_sends_recovery_while_the_tick_thread_is_stalled() {
-        let fc = FakeFc::bind();
-        let path = log_path("stall");
-        let config = config(fc.port(), path.to_str().unwrap());
-        let link = host_link(&fc);
-        let fc_thread = fc.spawn(loopback(&link));
-        let window = Arc::new(Mutex::new(None));
-        let mut stall = Stall {
-            tick: 0,
-            at: 6,
-            hold: Duration::from_millis(1_200),
-            window: Arc::clone(&window),
-        };
-        let worker = spec_worker();
-        let mut log = TickLog::open(&path, config.log.flush_every_n, 0).unwrap();
-        let report = run(&config, worker, &mut log, 0, link, &mut stall, options(9)).unwrap();
-        fc.stop.store(true, Ordering::SeqCst);
-        fc_thread.join().unwrap();
+        host_pause::guard(|| {
+            let fc = FakeFc::bind();
+            let path = log_path("stall");
+            let config = config(fc.port(), path.to_str().unwrap());
+            let link = host_link(&fc);
+            let fc_thread = fc.spawn(loopback(&link));
+            let window = Arc::new(Mutex::new(None));
+            let mut stall = Stall {
+                tick: 0,
+                at: 6,
+                hold: Duration::from_millis(1_200),
+                window: Arc::clone(&window),
+            };
+            let worker = spec_worker();
+            let mut log = TickLog::open(&path, config.log.flush_every_n, 0).unwrap();
+            let report = run(&config, worker, &mut log, 0, link, &mut stall, options(9)).unwrap();
+            fc.stop.store(true, Ordering::SeqCst);
+            fc_thread.join().unwrap();
 
-        assert!(report.watchdog_fired, "{report:?}");
-        assert!(report.recovery_sent);
-        let (started, ended) = lock(&window).unwrap();
-        let seen = lock(&fc.seen);
-        assert_eq!(seen.set_mode.len(), 1, "{seen:?}");
-        let (_, param2, param3, at) = seen.set_mode[0];
-        assert_eq!(param2, f32::from(PX4_MAIN_MODE_AUTO));
-        assert_eq!(param3, f32::from(PX4_SUB_MODE_AUTO_RTL));
-        // The mode arrived while the tick thread was still blocked.
-        assert!(
-            at > started && at < ended,
-            "{at:?} not in {started:?}..{ended:?}"
-        );
-        // After the stall the tick thread sees the latch and never resumes setpoints.
-        let text = std::fs::read_to_string(&path).unwrap();
-        let after: Vec<&str> = text
-            .lines()
-            .filter(|line| line.contains("latched"))
-            .collect();
-        assert!(!after.is_empty(), "{text}");
-        assert!(
-            after.iter().all(|line| line.contains("verdict=revert")),
-            "{text}"
-        );
-        let _ = std::fs::remove_file(&path);
+            assert!(report.watchdog_fired, "{report:?}");
+            assert!(report.recovery_sent);
+            let (started, ended) = lock(&window).unwrap();
+            let seen = lock(&fc.seen);
+            assert_eq!(seen.set_mode.len(), 1, "{seen:?}");
+            let (_, param2, param3, at) = seen.set_mode[0];
+            assert_eq!(param2, f32::from(PX4_MAIN_MODE_AUTO));
+            assert_eq!(param3, f32::from(PX4_SUB_MODE_AUTO_RTL));
+            // The mode arrived while the tick thread was still blocked.
+            assert!(
+                at > started && at < ended,
+                "{at:?} not in {started:?}..{ended:?}"
+            );
+            // After the stall the tick thread sees the latch and never resumes setpoints.
+            let text = std::fs::read_to_string(&path).unwrap();
+            let after: Vec<&str> = text
+                .lines()
+                .filter(|line| line.contains("latched"))
+                .collect();
+            assert!(!after.is_empty(), "{text}");
+            assert!(
+                after.iter().all(|line| line.contains("verdict=revert")),
+                "{text}"
+            );
+            let _ = std::fs::remove_file(&path);
+        });
     }
 
     /// The real spec until call `at`, then hung (never returns while `release` is unset) or
@@ -1310,15 +1315,19 @@ ready_fix_age_ms = 200
 
     #[test]
     fn a_hung_evaluator_reverts_within_one_deadline_and_the_fc_gets_recovery() {
-        let (report, seen, faulted_at, text) = run_with_faulty_eval("hung", None);
-        assert_reverted_on_the_faulted_tick(&report, &seen, faulted_at, &text);
+        host_pause::guard(|| {
+            let (report, seen, faulted_at, text) = run_with_faulty_eval("hung", None);
+            assert_reverted_on_the_faulted_tick(&report, &seen, faulted_at, &text);
+        });
     }
 
     #[test]
     fn a_slow_evaluator_past_the_deadline_reverts_and_latches() {
-        let (report, seen, faulted_at, text) =
-            run_with_faulty_eval("slow", Some(Duration::from_millis(200)));
-        assert_reverted_on_the_faulted_tick(&report, &seen, faulted_at, &text);
+        host_pause::guard(|| {
+            let (report, seen, faulted_at, text) =
+                run_with_faulty_eval("slow", Some(Duration::from_millis(200)));
+            assert_reverted_on_the_faulted_tick(&report, &seen, faulted_at, &text);
+        });
     }
 
     /// Outside the 200 m square fence from the first fix, so the first tick after the first
@@ -1404,185 +1413,196 @@ ready_fix_age_ms = 200
 
     #[test]
     fn a_dropped_first_recovery_command_is_resent_and_confirmed() {
-        let (report, seen, text) =
-            run_outside("dropped", Px4::DropFirst(1), |_| {}, 15, &mut StubComplex);
-        let sends = seen.recovery();
-        assert_eq!(sends.len(), 2, "{sends:?}\n{text}");
-        assert!(sends
-            .iter()
-            .all(|(command, _)| *command == MavCmd::MAV_CMD_DO_SET_MODE));
-        assert!(seen
-            .set_mode
-            .iter()
-            .all(|(p1, p2, p3, _)| (*p1, *p2, *p3) == (1.0, 4.0, 5.0)));
-        let policy = test_policy();
-        assert_never_early(|n| policy.wait_after(n), &sends);
-        assert!(report.recovery_confirmed, "{report:?}\n{text}");
-        assert_eq!(report.recovery_attempts, 2, "{report:?}");
-        assert!(!report.watchdog_fired);
-        let lines = tick_lines(&text);
-        assert!(
-            lines.iter().any(|l| l.contains("recovery_confirmed")),
-            "{text}"
-        );
-        assert!(lines.last().unwrap().contains("command=idle"), "{text}");
+        host_pause::guard(|| {
+            let (report, seen, text) =
+                run_outside("dropped", Px4::DropFirst(1), |_| {}, 15, &mut StubComplex);
+            let sends = seen.recovery();
+            assert_eq!(sends.len(), 2, "{sends:?}\n{text}");
+            assert!(sends
+                .iter()
+                .all(|(command, _)| *command == MavCmd::MAV_CMD_DO_SET_MODE));
+            assert!(seen
+                .set_mode
+                .iter()
+                .all(|(p1, p2, p3, _)| (*p1, *p2, *p3) == (1.0, 4.0, 5.0)));
+            let policy = test_policy();
+            assert_never_early(|n| policy.wait_after(n), &sends);
+            assert!(report.recovery_confirmed, "{report:?}\n{text}");
+            assert_eq!(report.recovery_attempts, 2, "{report:?}");
+            assert!(!report.watchdog_fired);
+            let lines = tick_lines(&text);
+            assert!(
+                lines.iter().any(|l| l.contains("recovery_confirmed")),
+                "{text}"
+            );
+            assert!(lines.last().unwrap().contains("command=idle"), "{text}");
+        });
     }
 
     #[test]
     fn a_vehicle_that_never_switches_gets_the_documented_order_then_silence() {
-        // 300 ms, 600 ms cap, two per step: six sends over about 2.7 s, used up at 3.3 s.
-        let (report, seen, text) =
-            run_outside("never", Px4::Ignore(None), |_| {}, 45, &mut StubComplex);
-        let sends = seen.recovery();
-        let commands: Vec<MavCmd> = sends.iter().map(|(command, _)| *command).collect();
-        assert_eq!(
-            commands,
-            [
-                MavCmd::MAV_CMD_DO_SET_MODE,
-                MavCmd::MAV_CMD_DO_SET_MODE,
-                MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH,
-                MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH,
-                MavCmd::MAV_CMD_NAV_LAND,
-                MavCmd::MAV_CMD_NAV_LAND,
-            ],
-            "{text}"
-        );
-        let policy = test_policy();
-        assert_never_early(|n| policy.wait_after(n), &sends);
-        // The cadence is bounded above too: a resend is never held back by much more than
-        // a tick plus the arrival jitter. Loose for a loaded runner.
-        for (index, pair) in sends.windows(2).enumerate() {
-            let gap = pair[1].1.duration_since(pair[0].1);
-            let wait = policy.wait_after(u32::try_from(index + 1).unwrap());
-            assert!(
-                gap < Duration::from_millis(wait + 600),
-                "{gap:?}: {sends:?}"
+        host_pause::guard(|| {
+            // 300 ms, 600 ms cap, two per step: six sends over about 2.7 s, used up at 3.3 s.
+            let (report, seen, text) =
+                run_outside("never", Px4::Ignore(None), |_| {}, 45, &mut StubComplex);
+            let sends = seen.recovery();
+            let commands: Vec<MavCmd> = sends.iter().map(|(command, _)| *command).collect();
+            assert_eq!(
+                commands,
+                [
+                    MavCmd::MAV_CMD_DO_SET_MODE,
+                    MavCmd::MAV_CMD_DO_SET_MODE,
+                    MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH,
+                    MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH,
+                    MavCmd::MAV_CMD_NAV_LAND,
+                    MavCmd::MAV_CMD_NAV_LAND,
+                ],
+                "{text}"
             );
-        }
-        assert!(report.recovery_sent);
-        assert!(!report.recovery_confirmed);
-        assert_eq!(report.recovery_attempts, 6);
-        assert_eq!(seen.setpoints, 0);
-        let lines = tick_lines(&text);
-        let last = lines.last().unwrap();
-        for item in [
-            "recovery_unconfirmed",
-            "attempts:6",
-            "latched",
-            "verdict=revert",
-        ] {
-            assert!(last.contains(item), "{item}: {last}");
-        }
+            let policy = test_policy();
+            assert_never_early(|n| policy.wait_after(n), &sends);
+            // The cadence is bounded above too: a resend is never held back by much more than
+            // a tick plus the arrival jitter. Loose for a loaded runner.
+            for (index, pair) in sends.windows(2).enumerate() {
+                let gap = pair[1].1.duration_since(pair[0].1);
+                let wait = policy.wait_after(u32::try_from(index + 1).unwrap());
+                assert!(
+                    gap < Duration::from_millis(wait + 600),
+                    "{gap:?}: {sends:?}"
+                );
+            }
+            assert!(report.recovery_sent);
+            assert!(!report.recovery_confirmed);
+            assert_eq!(report.recovery_attempts, 6);
+            assert_eq!(seen.setpoints, 0);
+            let lines = tick_lines(&text);
+            let last = lines.last().unwrap();
+            for item in [
+                "recovery_unconfirmed",
+                "attempts:6",
+                "latched",
+                "verdict=revert",
+            ] {
+                assert!(last.contains(item), "{item}: {last}");
+            }
+        });
     }
 
     #[test]
     fn denied_set_mode_falls_back_to_return_to_launch_at_once() {
-        // A long schedule, so a fallback that waited for it would be plain to see.
-        let (report, seen, text) = run_outside(
-            "denied",
-            Px4::DenySetMode,
-            |config| {
-                config.recovery.retry_initial_ms = 2_000;
-                config.recovery.retry_cap_ms = 2_000;
-            },
-            15,
-            &mut StubComplex,
-        );
-        let sends = seen.recovery();
-        let commands: Vec<MavCmd> = sends.iter().map(|(command, _)| *command).collect();
-        assert_eq!(
-            commands,
-            [
-                MavCmd::MAV_CMD_DO_SET_MODE,
-                MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH
-            ],
-            "{text}"
-        );
-        let gap = sends[1].1.duration_since(sends[0].1);
-        assert!(gap < Duration::from_millis(1_000), "{gap:?}\n{text}");
-        assert!(report.recovery_confirmed, "{report:?}\n{text}");
-        let lines = tick_lines(&text);
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains("fallback:denied") && l.contains("step:nav_rtl")),
-            "{text}"
-        );
-        assert!(
-            lines.last().unwrap().contains("recovery_confirmed"),
-            "{text}"
-        );
+        host_pause::guard(|| {
+            // A long schedule, so a fallback that waited for it would be plain to see.
+            let (report, seen, text) = run_outside(
+                "denied",
+                Px4::DenySetMode,
+                |config| {
+                    config.recovery.retry_initial_ms = 2_000;
+                    config.recovery.retry_cap_ms = 2_000;
+                },
+                15,
+                &mut StubComplex,
+            );
+            let sends = seen.recovery();
+            let commands: Vec<MavCmd> = sends.iter().map(|(command, _)| *command).collect();
+            assert_eq!(
+                commands,
+                [
+                    MavCmd::MAV_CMD_DO_SET_MODE,
+                    MavCmd::MAV_CMD_NAV_RETURN_TO_LAUNCH
+                ],
+                "{text}"
+            );
+            let gap = sends[1].1.duration_since(sends[0].1);
+            assert!(gap < Duration::from_millis(1_000), "{gap:?}\n{text}");
+            assert!(report.recovery_confirmed, "{report:?}\n{text}");
+            let lines = tick_lines(&text);
+            assert!(
+                lines
+                    .iter()
+                    .any(|l| l.contains("fallback:denied") && l.contains("step:nav_rtl")),
+                "{text}"
+            );
+            assert!(
+                lines.last().unwrap().contains("recovery_confirmed"),
+                "{text}"
+            );
+        });
     }
 
     #[test]
     fn an_accepted_ack_with_no_mode_report_keeps_resending() {
-        let (report, seen, text) = run_outside(
-            "accepted",
-            Px4::Ignore(Some(MavResult::MAV_RESULT_ACCEPTED)),
-            |_| {},
-            50,
-            &mut StubComplex,
-        );
-        let sends = seen.recovery();
-        // An accepted ack is not a confirmed mode: the second DO_SET_MODE goes out, then
-        // the order moves on.
-        assert!(sends.len() >= 3, "{sends:?}\n{text}");
-        assert_eq!(seen.set_mode.len(), 2, "{text}");
-        let policy = test_policy();
-        assert_never_early(|n| policy.wait_after(n), &sends);
-        // Every send here was accepted, so each resend waited for a heartbeat to show the
-        // mode: at least the hold, which is longer than one 1 Hz heartbeat period. PX4 SITL
-        // reports a mode change in HEARTBEAT up to a second after it accepts it.
-        assert!(policy.ack_hold_ms > 1_000, "{policy:?}");
-        let hold = Duration::from_millis(policy.ack_hold_ms);
-        for pair in sends.windows(2) {
-            let gap = pair[1].1.duration_since(pair[0].1);
-            assert!(
-                gap + ARRIVAL_SLACK >= hold,
-                "resend {gap:?} after an accepted ack: {sends:?}"
+        host_pause::guard(|| {
+            let (report, seen, text) = run_outside(
+                "accepted",
+                Px4::Ignore(Some(MavResult::MAV_RESULT_ACCEPTED)),
+                |_| {},
+                50,
+                &mut StubComplex,
             );
-        }
-        assert!(!report.recovery_confirmed);
-        let lines = tick_lines(&text);
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains("ack:accepted") && l.contains("recovery_pending")),
-            "{text}"
-        );
+            let sends = seen.recovery();
+            // An accepted ack is not a confirmed mode: the second DO_SET_MODE goes out, then
+            // the order moves on.
+            assert!(sends.len() >= 3, "{sends:?}\n{text}");
+            assert_eq!(seen.set_mode.len(), 2, "{text}");
+            let policy = test_policy();
+            assert_never_early(|n| policy.wait_after(n), &sends);
+            // Every send here was accepted, so each resend waited for a heartbeat to show the
+            // mode: at least the hold, which is longer than one 1 Hz heartbeat period. PX4 SITL
+            // reports a mode change in HEARTBEAT up to a second after it accepts it.
+            assert!(policy.ack_hold_ms > 1_000, "{policy:?}");
+            let hold = Duration::from_millis(policy.ack_hold_ms);
+            for pair in sends.windows(2) {
+                let gap = pair[1].1.duration_since(pair[0].1);
+                assert!(
+                    gap + ARRIVAL_SLACK >= hold,
+                    "resend {gap:?} after an accepted ack: {sends:?}"
+                );
+            }
+            assert!(!report.recovery_confirmed);
+            let lines = tick_lines(&text);
+            assert!(
+                lines
+                    .iter()
+                    .any(|l| l.contains("ack:accepted") && l.contains("recovery_pending")),
+                "{text}"
+            );
+        });
     }
 
     #[test]
     fn the_tick_and_the_watchdog_never_send_the_same_attempt() {
-        // The tick thread blocks for 1.5 s while resends are due. The watchdog takes over the
-        // same latch, then the tick thread comes back to it.
-        let window = Arc::new(Mutex::new(None));
-        let mut stall = Stall {
-            tick: 0,
-            at: 6,
-            hold: Duration::from_millis(1_500),
-            window: Arc::clone(&window),
-        };
-        let (report, seen, text) = run_outside("shared", Px4::Ignore(None), |_| {}, 20, &mut stall);
-        let sends = seen.recovery();
-        assert!(report.watchdog_fired, "{report:?}\n{text}");
-        // Every send the fake saw is one attempt the latch counted, and no two are close.
-        assert_eq!(
-            u32::try_from(sends.len()).unwrap(),
-            report.recovery_attempts,
-            "{sends:?}"
-        );
-        let policy = test_policy();
-        assert_never_early(|n| policy.wait_after(n), &sends);
-        let (started, ended) = lock(&window).unwrap();
-        assert!(
-            sends.iter().any(|(_, at)| *at > started && *at < ended),
-            "no resend during the stall: {sends:?}"
-        );
-        assert!(
-            sends.iter().any(|(_, at)| *at > ended),
-            "the tick thread did not resume the resends: {sends:?}"
-        );
+        host_pause::guard(|| {
+            // The tick thread blocks for 1.5 s while resends are due. The watchdog takes over the
+            // same latch, then the tick thread comes back to it.
+            let window = Arc::new(Mutex::new(None));
+            let mut stall = Stall {
+                tick: 0,
+                at: 6,
+                hold: Duration::from_millis(1_500),
+                window: Arc::clone(&window),
+            };
+            let (report, seen, text) =
+                run_outside("shared", Px4::Ignore(None), |_| {}, 20, &mut stall);
+            let sends = seen.recovery();
+            assert!(report.watchdog_fired, "{report:?}\n{text}");
+            // Every send the fake saw is one attempt the latch counted, and no two are close.
+            assert_eq!(
+                u32::try_from(sends.len()).unwrap(),
+                report.recovery_attempts,
+                "{sends:?}"
+            );
+            let policy = test_policy();
+            assert_never_early(|n| policy.wait_after(n), &sends);
+            let (started, ended) = lock(&window).unwrap();
+            assert!(
+                sends.iter().any(|(_, at)| *at > started && *at < ended),
+                "no resend during the stall: {sends:?}"
+            );
+            assert!(
+                sends.iter().any(|(_, at)| *at > ended),
+                "the tick thread did not resume the resends: {sends:?}"
+            );
+        });
     }
 
     /// A complex function that blocks for `hold` on a tick when, by what the fake has seen,
@@ -1618,40 +1638,42 @@ ready_fix_age_ms = 200
 
     #[test]
     fn a_slow_tick_does_not_pull_the_next_resend_early() {
-        // A tick that reads the clock, then blocks for 400 ms before it sends a due resend.
-        // The watchdog is held off, so only the tick thread sends. The next resend must wait
-        // the full policy wait after the send that went on the wire. Timed from the clock
-        // reading at the top of the slow tick, it falls due 400 ms early and the next, fast,
-        // tick sends it about 200 ms after the one before.
-        let mut fc = FakeFc::bind();
-        fc.px4 = Px4::Ignore(None);
-        *lock(&fc.position) = OUTSIDE;
-        let policy = test_policy();
-        let mut slow = SlowWhenDue {
-            seen: Arc::clone(&fc.seen),
-            policy,
-            attempts: policy.attempts_per_step * 3,
-            hold: Duration::from_millis(400),
-            stalls: 3,
-        };
-        let (report, seen, _text) = run_fc(
-            "slow-tick",
-            &fc,
-            |config| config.tick.watchdog_misses = 50,
-            40,
-            &mut slow,
-        );
-        let sends = seen.recovery();
-        // The watchdog is held off for 5 s, but a whole-machine pause that long (one was seen
-        // in a stress run) still wakes it. Its sends are timed from a fresh clock reading, so
-        // the never-early check below holds either way, so `watchdog_fired` is not asserted.
-        assert_eq!(slow.stalls, 0, "the slow ticks did not all run: {sends:?}");
-        assert_eq!(
-            u32::try_from(sends.len()).unwrap(),
-            report.recovery_attempts,
-            "{sends:?}"
-        );
-        assert_never_early(|n| policy.wait_after(n), &sends);
+        host_pause::guard(|| {
+            // A tick that reads the clock, then blocks for 400 ms before it sends a due resend.
+            // The watchdog is held off, so only the tick thread sends. The next resend must wait
+            // the full policy wait after the send that went on the wire. Timed from the clock
+            // reading at the top of the slow tick, it falls due 400 ms early and the next, fast,
+            // tick sends it about 200 ms after the one before.
+            let mut fc = FakeFc::bind();
+            fc.px4 = Px4::Ignore(None);
+            *lock(&fc.position) = OUTSIDE;
+            let policy = test_policy();
+            let mut slow = SlowWhenDue {
+                seen: Arc::clone(&fc.seen),
+                policy,
+                attempts: policy.attempts_per_step * 3,
+                hold: Duration::from_millis(400),
+                stalls: 3,
+            };
+            let (report, seen, _text) = run_fc(
+                "slow-tick",
+                &fc,
+                |config| config.tick.watchdog_misses = 50,
+                40,
+                &mut slow,
+            );
+            let sends = seen.recovery();
+            // The watchdog is held off for 5 s, but a whole-machine pause that long (one was seen
+            // in a stress run) still wakes it. Its sends are timed from a fresh clock reading, so
+            // the never-early check below holds either way, so `watchdog_fired` is not asserted.
+            assert_eq!(slow.stalls, 0, "the slow ticks did not all run: {sends:?}");
+            assert_eq!(
+                u32::try_from(sends.len()).unwrap(),
+                report.recovery_attempts,
+                "{sends:?}"
+            );
+            assert_never_early(|n| policy.wait_after(n), &sends);
+        });
     }
 
     /// A complex function that asks for nothing and runs scripted actions on given ticks, on
@@ -1713,75 +1735,79 @@ ready_fix_age_ms = 200
 
     #[test]
     fn setpoints_and_recovery_go_to_the_heard_flight_controller_with_yaw_and_boot_time() {
-        let mut fc = FakeFc::bind();
-        // Not the configured companion id (1), and not the old hard-coded component (1).
-        fc.ids = (42, 7);
-        let request = Request {
-            north: 120.0,
-            east: 80.0,
-            down: -25.0,
-            yaw: 0.75,
-            commit: true,
-        };
-        let mut asks = Asks {
-            tick: 0,
-            request,
-            breach_at: 12,
-            position: Arc::clone(&fc.position),
-        };
-        let started = Instant::now();
-        let (report, seen, text) = run_fc("targets", &fc, |_| {}, 18, &mut asks);
-        let elapsed_ms = u32::try_from(started.elapsed().as_millis()).unwrap();
-        assert!(report.recovery_sent, "{text}");
-        assert!(seen.setpoints >= 3, "{seen:?}\n{text}");
-        for data in &seen.setpoint_data {
-            assert_eq!(data.type_mask.bits(), 0x09F8, "{data:?}");
-            assert_eq!((data.x, data.y, data.z), (120.0, 80.0, -25.0));
-            assert_eq!(data.yaw, 0.75);
-            assert_eq!((data.target_system, data.target_component), (42, 7));
+        host_pause::guard(|| {
+            let mut fc = FakeFc::bind();
+            // Not the configured companion id (1), and not the old hard-coded component (1).
+            fc.ids = (42, 7);
+            let request = Request {
+                north: 120.0,
+                east: 80.0,
+                down: -25.0,
+                yaw: 0.75,
+                commit: true,
+            };
+            let mut asks = Asks {
+                tick: 0,
+                request,
+                breach_at: 12,
+                position: Arc::clone(&fc.position),
+            };
+            let started = Instant::now();
+            let (report, seen, text) = run_fc("targets", &fc, |_| {}, 18, &mut asks);
+            let elapsed_ms = u32::try_from(started.elapsed().as_millis()).unwrap();
+            assert!(report.recovery_sent, "{text}");
+            assert!(seen.setpoints >= 3, "{seen:?}\n{text}");
+            for data in &seen.setpoint_data {
+                assert_eq!(data.type_mask.bits(), 0x09F8, "{data:?}");
+                assert_eq!((data.x, data.y, data.z), (120.0, 80.0, -25.0));
+                assert_eq!(data.yaw, 0.75);
+                assert_eq!((data.target_system, data.target_component), (42, 7));
+                assert!(
+                    data.time_boot_ms <= elapsed_ms,
+                    "{data:?} after {elapsed_ms} ms"
+                );
+            }
+            // The boot time is the run clock: it never goes back and it moves between ticks.
+            let times: Vec<u32> = seen.setpoint_data.iter().map(|d| d.time_boot_ms).collect();
+            assert!(times.windows(2).all(|pair| pair[0] <= pair[1]), "{times:?}");
+            assert!(times.last() > times.first(), "{times:?}");
+            assert!(!seen.command_targets.is_empty(), "{seen:?}");
             assert!(
-                data.time_boot_ms <= elapsed_ms,
-                "{data:?} after {elapsed_ms} ms"
+                seen.command_targets.iter().all(|target| *target == (42, 7)),
+                "{:?}",
+                seen.command_targets
             );
-        }
-        // The boot time is the run clock: it never goes back and it moves between ticks.
-        let times: Vec<u32> = seen.setpoint_data.iter().map(|d| d.time_boot_ms).collect();
-        assert!(times.windows(2).all(|pair| pair[0] <= pair[1]), "{times:?}");
-        assert!(times.last() > times.first(), "{times:?}");
-        assert!(!seen.command_targets.is_empty(), "{seen:?}");
-        assert!(
-            seen.command_targets.iter().all(|target| *target == (42, 7)),
-            "{:?}",
-            seen.command_targets
-        );
-        // The flight controller's ack, from (42, 7), confirmed nothing the heartbeat did not.
-        assert!(report.recovery_confirmed, "{report:?}");
+            // The flight controller's ack, from (42, 7), confirmed nothing the heartbeat did not.
+            assert!(report.recovery_confirmed, "{report:?}");
+        });
     }
 
     #[test]
     fn a_non_finite_setpoint_request_is_logged_and_not_forwarded() {
-        let fc = FakeFc::bind();
-        let mut asks = Asks {
-            tick: 0,
-            request: Request {
-                north: 120.0,
-                east: 80.0,
-                down: -25.0,
-                yaw: f64::NAN,
-                commit: false,
-            },
-            breach_at: u64::MAX,
-            position: Arc::clone(&fc.position),
-        };
-        let (_, seen, text) = run_fc("bad-setpoint", &fc, |_| {}, 8, &mut asks);
-        assert_eq!(seen.setpoints, 0, "{seen:?}");
-        let lines = heard_lines(&text);
-        assert!(
+        host_pause::guard(|| {
+            let fc = FakeFc::bind();
+            let mut asks = Asks {
+                tick: 0,
+                request: Request {
+                    north: 120.0,
+                    east: 80.0,
+                    down: -25.0,
+                    yaw: f64::NAN,
+                    commit: false,
+                },
+                breach_at: u64::MAX,
+                position: Arc::clone(&fc.position),
+            };
+            let (_, seen, text) = run_fc("bad-setpoint", &fc, |_| {}, 8, &mut asks);
+            assert_eq!(seen.setpoints, 0, "{seen:?}");
+            let lines = heard_lines(&text);
+            assert!(
             lines
                 .iter()
                 .any(|line| line.contains("bad_setpoint") && line.contains("command=setpoints")),
             "{text}"
         );
+        });
     }
 
     fn immediate(config: &mut Config) {
@@ -1798,29 +1824,40 @@ ready_fix_age_ms = 200
 
     #[test]
     fn a_disarmed_vehicle_is_never_commanded_even_outside_the_fence() {
-        let fc = FakeFc::bind();
-        fc.armed.store(false, Ordering::SeqCst);
-        *lock(&fc.position) = OUTSIDE;
-        let (report, seen, text) = run_fc("disarmed", &fc, |_| {}, 15, &mut StubComplex);
-        assert!(seen.recovery().is_empty(), "{text}");
-        assert_eq!(seen.setpoints, 0);
-        assert!(!report.recovery_sent, "{report:?}");
-        let lines = heard_lines(&text);
-        assert!(!lines.is_empty(), "{text}");
-        for line in lines {
-            // Monitored and logged: the fence Revert is there, and nothing went out.
-            for item in ["disarmed", "verdict=revert", "fence_ok=0"] {
-                assert!(line.contains(item), "{item}: {line}");
+        host_pause::guard(|| {
+            let fc = FakeFc::bind();
+            fc.armed.store(false, Ordering::SeqCst);
+            *lock(&fc.position) = OUTSIDE;
+            let (report, seen, text) = run_fc("disarmed", &fc, |_| {}, 15, &mut StubComplex);
+            assert!(seen.recovery().is_empty(), "{text}");
+            assert_eq!(seen.setpoints, 0);
+            assert!(!report.recovery_sent, "{report:?}");
+            let lines = heard_lines(&text);
+            assert!(!lines.is_empty(), "{text}");
+            for line in lines {
+                // Monitored and logged: the fence Revert is there, and nothing went out.
+                for item in ["disarmed", "verdict=revert", "fence_ok=0"] {
+                    assert!(line.contains(item), "{item}: {line}");
+                }
+                assert!(
+                    !line.contains("sent:") && !line.contains("recovery_"),
+                    "{line}"
+                );
             }
-            assert!(
-                !line.contains("sent:") && !line.contains("recovery_"),
-                "{line}"
-            );
-        }
+        });
     }
 
-    #[test]
-    fn arm_after_ready_then_a_breach_sends_one_auto_rtl_and_disarm_is_monitor_only() {
+    /// The field of a tick-log line, as a number.
+    fn field(line: &str, key: &str) -> f64 {
+        line.split_whitespace()
+            .find_map(|part| part.strip_prefix(key)?.strip_prefix('='))
+            .and_then(|value| value.parse().ok())
+            .unwrap_or_else(|| panic!("{key}: {line}"))
+    }
+
+    /// One arm-then-breach run. `None` when the arm landed on a tick that was not ready, after
+    /// checking that the host handled that case safely; the caller tries again.
+    fn arm_then_breach() -> Option<()> {
         let fc = FakeFc::bind();
         fc.armed.store(false, Ordering::SeqCst);
         let armed_at = Arc::new(Mutex::new(None));
@@ -1840,17 +1877,41 @@ ready_fix_age_ms = 200
             })
             .at(16, set(&fc.armed, false));
         let (report, seen, text) = run_fc("arm", &fc, |_| {}, 20, &mut script);
-        assert_eq!(seen.set_mode.len(), 1, "{text}");
-        assert!(seen.nav.is_empty());
-        let (p1, p2, p3, at) = seen.set_mode[0];
-        assert_eq!((p1, p2, p3), (1.0, 4.0, 5.0));
-        assert!(
-            at > lock(&armed_at).unwrap(),
-            "commanded before the arm\n{text}"
-        );
-        assert!(report.recovery_confirmed, "{report:?}");
+        let armed_at = lock(&armed_at).unwrap();
         let lines = heard_lines(&text);
         assert!(lines[0].contains("disarmed"), "{text}");
+        // Whatever the timing, nothing is commanded before the arm or while disarmed.
+        for (_, _, _, at) in &seen.set_mode {
+            assert!(*at > armed_at, "commanded before the arm\n{text}");
+        }
+        for line in lines.iter().filter(|line| line.contains("disarmed")) {
+            assert!(!line.contains("sent:"), "{line}");
+        }
+        let arm = lines
+            .iter()
+            .find(|line| !line.contains("disarmed"))
+            .unwrap_or_else(|| panic!("the arm was never seen\n{text}"));
+        if arm.contains("not_ready_at_arm") {
+            // A loaded host can starve the fake's stream, or the tick thread, past the 200 ms
+            // readiness limit just as the arm lands (seen once in 60 runs under 16 busy loops:
+            // fix_age_ms=320). Arming on a stale fix is not ready, and latching Revert is the
+            // right answer (`arm_before_ready_reverts_at_once_and_latches_the_fault`). That
+            // run cannot show the ready path, so it is checked for what it did show.
+            assert!(
+                field(arm, "fix_age_ms") > 200.0,
+                "not_ready_at_arm with a fresh fix\n{text}"
+            );
+            assert!(
+                arm.contains("latched") && arm.contains("verdict=revert"),
+                "{arm}"
+            );
+            return None;
+        }
+        assert_eq!(seen.set_mode.len(), 1, "{text}");
+        assert!(seen.nav.is_empty());
+        let (p1, p2, p3, _) = seen.set_mode[0];
+        assert_eq!((p1, p2, p3), (1.0, 4.0, 5.0));
+        assert!(report.recovery_confirmed, "{report:?}");
         assert!(!text.contains("not_ready_at_arm"), "{text}");
         let sent = lines
             .iter()
@@ -1861,117 +1922,138 @@ ready_fix_age_ms = 200
             "{sent}"
         );
         assert!(lines.last().unwrap().contains("disarmed"), "{text}");
+        Some(())
+    }
+
+    #[test]
+    fn arm_after_ready_then_a_breach_sends_one_auto_rtl_and_disarm_is_monitor_only() {
+        host_pause::guard(|| {
+            // Three tries for the arm to land on a ready tick. Every try is checked; a host
+            // too loaded to give one ready arm in three fails the test.
+            let shown = (0..3).any(|_| arm_then_breach().is_some());
+            assert!(shown, "the arm never landed on a ready tick in 3 runs");
+        });
     }
 
     #[test]
     fn arm_before_ready_reverts_at_once_and_latches_the_fault() {
-        let fc = FakeFc::bind();
-        fc.streaming.store(false, Ordering::SeqCst);
-        let mut script = Script::new().at(6, set(&fc.streaming, true));
-        let (report, seen, text) = run_fc("early-arm", &fc, |_| {}, 12, &mut script);
-        assert_eq!(seen.set_mode.len(), 1, "{text}");
-        assert!(report.recovery_sent);
-        let lines = heard_lines(&text);
-        for item in [
-            "not_ready_at_arm",
-            "verdict=revert",
-            "command=mode",
-            "sent:set_mode",
-        ] {
-            assert!(lines[0].contains(item), "{item}: {}\n{text}", lines[0]);
-        }
-        // The fix arriving later does not clear it.
-        for line in &lines[1..] {
-            assert!(line.contains("not_ready_at_arm"), "{line}");
-            assert!(
-                line.contains("latched") && line.contains("verdict=revert"),
-                "{line}"
-            );
-        }
+        host_pause::guard(|| {
+            let fc = FakeFc::bind();
+            fc.streaming.store(false, Ordering::SeqCst);
+            let mut script = Script::new().at(6, set(&fc.streaming, true));
+            let (report, seen, text) = run_fc("early-arm", &fc, |_| {}, 12, &mut script);
+            assert_eq!(seen.set_mode.len(), 1, "{text}");
+            assert!(report.recovery_sent);
+            let lines = heard_lines(&text);
+            for item in [
+                "not_ready_at_arm",
+                "verdict=revert",
+                "command=mode",
+                "sent:set_mode",
+            ] {
+                assert!(lines[0].contains(item), "{item}: {}\n{text}", lines[0]);
+            }
+            // The fix arriving later does not clear it.
+            for line in &lines[1..] {
+                assert!(line.contains("not_ready_at_arm"), "{line}");
+                assert!(
+                    line.contains("latched") && line.contains("verdict=revert"),
+                    "{line}"
+                );
+            }
+        });
     }
 
     #[test]
     fn a_heartbeat_before_any_position_no_longer_sends_rtl_at_boot() {
-        let fc = FakeFc::bind();
-        fc.streaming.store(false, Ordering::SeqCst);
-        let last_tick = Arc::new(Mutex::new(None));
-        let mut script = Script::new().at(5, set(&fc.streaming, true)).at(12, {
-            let last_tick = Arc::clone(&last_tick);
-            move || *lock(&last_tick) = Some(Instant::now())
+        host_pause::guard(|| {
+            let fc = FakeFc::bind();
+            fc.streaming.store(false, Ordering::SeqCst);
+            let last_tick = Arc::new(Mutex::new(None));
+            let mut script = Script::new().at(5, set(&fc.streaming, true)).at(12, {
+                let last_tick = Arc::clone(&last_tick);
+                move || *lock(&last_tick) = Some(Instant::now())
+            });
+            let (_, seen, text) = run_fc("boot", &fc, immediate, 12, &mut script);
+            // The shutdown order still sends the recovery mode after the last tick. Nothing is
+            // sent before it.
+            let last_tick = lock(&last_tick).unwrap();
+            assert!(
+                seen.recovery().iter().all(|(_, at)| *at > last_tick),
+                "{text}"
+            );
+            assert!(!text.contains("sent:"), "{text}");
+            let lines = heard_lines(&text);
+            assert!(lines[0].contains("not_ready"), "{text}");
+            let first_ready = lines
+                .iter()
+                .position(|line| !line.contains("not_ready"))
+                .unwrap_or_else(|| panic!("never ready\n{text}"));
+            for line in &lines[first_ready..] {
+                // Nominal: inside the fence, no tracker, so inhibit.
+                assert!(line.contains("verdict=inhibit"), "{line}\n{text}");
+                assert!(!line.contains("latched"), "{line}");
+            }
         });
-        let (_, seen, text) = run_fc("boot", &fc, immediate, 12, &mut script);
-        // The shutdown order still sends the recovery mode after the last tick. Nothing is
-        // sent before it.
-        let last_tick = lock(&last_tick).unwrap();
-        assert!(
-            seen.recovery().iter().all(|(_, at)| *at > last_tick),
-            "{text}"
-        );
-        assert!(!text.contains("sent:"), "{text}");
-        let lines = heard_lines(&text);
-        assert!(lines[0].contains("not_ready"), "{text}");
-        let first_ready = lines
-            .iter()
-            .position(|line| !line.contains("not_ready"))
-            .unwrap_or_else(|| panic!("never ready\n{text}"));
-        for line in &lines[first_ready..] {
-            // Nominal: inside the fence, no tracker, so inhibit.
-            assert!(line.contains("verdict=inhibit"), "{line}\n{text}");
-            assert!(!line.contains("latched"), "{line}");
-        }
     }
 
     #[test]
     fn immediate_mode_commands_a_disarmed_vehicle_once_ready() {
-        let fc = FakeFc::bind();
-        fc.armed.store(false, Ordering::SeqCst);
-        *lock(&fc.position) = OUTSIDE;
-        let (report, seen, text) = run_fc("immediate", &fc, immediate, 12, &mut StubComplex);
-        assert_eq!(seen.set_mode.len(), 1, "{text}");
-        assert!(report.recovery_confirmed);
-        assert!(!text.contains("disarmed"), "{text}");
-        assert!(heard_lines(&text)[0].contains("sent:set_mode"), "{text}");
+        host_pause::guard(|| {
+            let fc = FakeFc::bind();
+            fc.armed.store(false, Ordering::SeqCst);
+            *lock(&fc.position) = OUTSIDE;
+            let (report, seen, text) = run_fc("immediate", &fc, immediate, 12, &mut StubComplex);
+            assert_eq!(seen.set_mode.len(), 1, "{text}");
+            assert!(report.recovery_confirmed);
+            assert!(!text.contains("disarmed"), "{text}");
+            assert!(heard_lines(&text)[0].contains("sent:set_mode"), "{text}");
+        });
     }
 
     #[test]
     fn the_watchdog_is_gated_while_disarmed() {
-        let fc = FakeFc::bind();
-        fc.armed.store(false, Ordering::SeqCst);
-        *lock(&fc.position) = OUTSIDE;
-        let window = Arc::new(Mutex::new(None));
-        let mut stall = Stall {
-            tick: 0,
-            at: 4,
-            hold: Duration::from_millis(1_200),
-            window: Arc::clone(&window),
-        };
-        let (report, seen, text) = run_fc("dog-gated", &fc, |_| {}, 8, &mut stall);
-        assert!(lock(&window).is_some());
-        assert!(!report.watchdog_fired, "{report:?}\n{text}");
-        assert!(seen.recovery().is_empty(), "{text}");
-        assert!(!report.recovery_sent);
+        host_pause::guard(|| {
+            let fc = FakeFc::bind();
+            fc.armed.store(false, Ordering::SeqCst);
+            *lock(&fc.position) = OUTSIDE;
+            let window = Arc::new(Mutex::new(None));
+            let mut stall = Stall {
+                tick: 0,
+                at: 4,
+                hold: Duration::from_millis(1_200),
+                window: Arc::clone(&window),
+            };
+            let (report, seen, text) = run_fc("dog-gated", &fc, |_| {}, 8, &mut stall);
+            assert!(lock(&window).is_some());
+            assert!(!report.watchdog_fired, "{report:?}\n{text}");
+            assert!(seen.recovery().is_empty(), "{text}");
+            assert!(!report.recovery_sent);
+        });
     }
 
     #[test]
     fn the_ready_timeout_is_logged_and_nothing_is_commanded_while_disarmed() {
-        let fc = FakeFc::bind();
-        fc.armed.store(false, Ordering::SeqCst);
-        fc.streaming.store(false, Ordering::SeqCst);
-        let (report, seen, text) = run_fc(
-            "timeout",
-            &fc,
-            |config| config.startup.ready_timeout_ms = 300,
-            10,
-            &mut StubComplex,
-        );
-        assert!(seen.recovery().is_empty(), "{text}");
-        assert!(!report.recovery_sent);
-        let lines = tick_lines(&text);
-        assert!(lines.last().unwrap().contains("ready_timeout"), "{text}");
-        assert!(
-            heard_lines(&text).iter().all(|l| l.contains("disarmed")),
-            "{text}"
-        );
+        host_pause::guard(|| {
+            let fc = FakeFc::bind();
+            fc.armed.store(false, Ordering::SeqCst);
+            fc.streaming.store(false, Ordering::SeqCst);
+            let (report, seen, text) = run_fc(
+                "timeout",
+                &fc,
+                |config| config.startup.ready_timeout_ms = 300,
+                10,
+                &mut StubComplex,
+            );
+            assert!(seen.recovery().is_empty(), "{text}");
+            assert!(!report.recovery_sent);
+            let lines = tick_lines(&text);
+            assert!(lines.last().unwrap().contains("ready_timeout"), "{text}");
+            assert!(
+                heard_lines(&text).iter().all(|l| l.contains("disarmed")),
+                "{text}"
+            );
+        });
     }
 
     /// A triangle: the lower-left half of the 200 m test square.
@@ -1989,142 +2071,154 @@ ready_fix_age_ms = 200
 
     #[test]
     fn the_tick_fences_on_the_configured_polygon() {
-        let mut vehicle = Vehicle {
-            fix_ms: Some(0),
-            alt_m: 30.0,
-            ..Vehicle::default()
-        };
-        let square = config(1, "unused.log");
-        let mut triangle = config(1, "unused.log");
-        with_polygon(&mut triangle, &TRIANGLE);
-        // Inside the square, outside the triangle: only the configured polygon decides.
-        (vehicle.north_m, vehicle.east_m) = (155.0, 155.0);
-        assert!(present(&square, &vehicle, 0).unwrap().fence_ok);
-        assert!(!present(&triangle, &vehicle, 0).unwrap().fence_ok);
-        // Deep inside both.
-        (vehicle.north_m, vehicle.east_m) = (60.0, 60.0);
-        assert!(present(&triangle, &vehicle, 0).unwrap().fence_ok);
-        // An empty or degenerate polygon is never inside.
-        for polygon in [&[][..], &TRIANGLE[..2]] {
-            let mut bad = config(1, "unused.log");
-            with_polygon(&mut bad, polygon);
-            assert!(!present(&bad, &vehicle, 0).unwrap().fence_ok, "{polygon:?}");
-        }
+        host_pause::guard(|| {
+            let mut vehicle = Vehicle {
+                fix_ms: Some(0),
+                alt_m: 30.0,
+                ..Vehicle::default()
+            };
+            let square = config(1, "unused.log");
+            let mut triangle = config(1, "unused.log");
+            with_polygon(&mut triangle, &TRIANGLE);
+            // Inside the square, outside the triangle: only the configured polygon decides.
+            (vehicle.north_m, vehicle.east_m) = (155.0, 155.0);
+            assert!(present(&square, &vehicle, 0).unwrap().fence_ok);
+            assert!(!present(&triangle, &vehicle, 0).unwrap().fence_ok);
+            // Deep inside both.
+            (vehicle.north_m, vehicle.east_m) = (60.0, 60.0);
+            assert!(present(&triangle, &vehicle, 0).unwrap().fence_ok);
+            // An empty or degenerate polygon is never inside.
+            for polygon in [&[][..], &TRIANGLE[..2]] {
+                let mut bad = config(1, "unused.log");
+                with_polygon(&mut bad, polygon);
+                assert!(!present(&bad, &vehicle, 0).unwrap().fence_ok, "{polygon:?}");
+            }
+        });
     }
 
     #[test]
     fn a_configured_polygon_trips_the_loop() {
-        // The fake sits at (155, 155): inside the default square, outside the configured
-        // triangle. The loop reverts and commands AUTO + RTL on the first heard tick.
-        let fc = FakeFc::bind();
-        *lock(&fc.position) = (155.0, 155.0, -30.0);
-        let (report, seen, text) = run_fc(
-            "triangle",
-            &fc,
-            |config| with_polygon(config, &TRIANGLE),
-            8,
-            &mut StubComplex,
-        );
-        assert_eq!(seen.set_mode.len(), 1, "{text}");
-        assert!(report.recovery_confirmed, "{report:?}");
-        let first = heard_lines(&text)[0];
-        for item in ["fence_ok=0", "verdict=revert", "sent:set_mode"] {
-            assert!(first.contains(item), "{item}: {first}");
-        }
+        host_pause::guard(|| {
+            // The fake sits at (155, 155): inside the default square, outside the configured
+            // triangle. The loop reverts and commands AUTO + RTL on the first heard tick.
+            let fc = FakeFc::bind();
+            *lock(&fc.position) = (155.0, 155.0, -30.0);
+            let (report, seen, text) = run_fc(
+                "triangle",
+                &fc,
+                |config| with_polygon(config, &TRIANGLE),
+                8,
+                &mut StubComplex,
+            );
+            assert_eq!(seen.set_mode.len(), 1, "{text}");
+            assert!(report.recovery_confirmed, "{report:?}");
+            let first = heard_lines(&text)[0];
+            for item in ["fence_ok=0", "verdict=revert", "sent:set_mode"] {
+                assert!(first.contains(item), "{item}: {first}");
+            }
+        });
     }
 
     #[test]
     fn nothing_is_commanded_before_the_flight_controller_is_heard() {
-        let silent = UdpSocket::bind("127.0.0.1:0").unwrap();
-        silent
-            .set_read_timeout(Some(Duration::from_millis(50)))
+        host_pause::guard(|| {
+            let silent = UdpSocket::bind("127.0.0.1:0").unwrap();
+            silent
+                .set_read_timeout(Some(Duration::from_millis(50)))
+                .unwrap();
+            let port = silent.local_addr().unwrap().port();
+            let path = log_path("silent");
+            let config = config(port, path.to_str().unwrap());
+            let link = open(
+                &Endpoint::Udp {
+                    host: "127.0.0.1".into(),
+                    port,
+                },
+                RECV_TIMEOUT,
+            )
             .unwrap();
-        let port = silent.local_addr().unwrap().port();
-        let path = log_path("silent");
-        let config = config(port, path.to_str().unwrap());
-        let link = open(
-            &Endpoint::Udp {
-                host: "127.0.0.1".into(),
-                port,
-            },
-            RECV_TIMEOUT,
-        )
-        .unwrap();
-        let worker = spec_worker();
-        let mut log = TickLog::open(&path, 1, 0).unwrap();
-        let report = run(
-            &config,
-            worker,
-            &mut log,
-            0,
-            link,
-            &mut StubComplex,
-            options(5),
-        )
-        .unwrap();
-        assert!(!report.recovery_sent);
-        // Only companion heartbeats reach the silent peer.
-        let mut buffer = [0_u8; RECV_BUFFER];
-        while let Ok((count, _)) = silent.recv_from(&mut buffer) {
-            decode_each(&buffer[..count], |_, message| {
-                assert!(matches!(message, MavMessage::HEARTBEAT(_)), "{message:?}");
-            });
-        }
-        let text = std::fs::read_to_string(&path).unwrap();
-        assert_eq!(text.lines().count(), 6);
-        for line in text.lines().skip(1) {
-            assert!(
-                line.contains("verdict=revert") && line.contains("no_fc"),
-                "{line}"
-            );
-        }
-        let _ = std::fs::remove_file(&path);
+            let worker = spec_worker();
+            let mut log = TickLog::open(&path, 1, 0).unwrap();
+            let report = run(
+                &config,
+                worker,
+                &mut log,
+                0,
+                link,
+                &mut StubComplex,
+                options(5),
+            )
+            .unwrap();
+            assert!(!report.recovery_sent);
+            // Only companion heartbeats reach the silent peer.
+            let mut buffer = [0_u8; RECV_BUFFER];
+            while let Ok((count, _)) = silent.recv_from(&mut buffer) {
+                decode_each(&buffer[..count], |_, message| {
+                    assert!(matches!(message, MavMessage::HEARTBEAT(_)), "{message:?}");
+                });
+            }
+            let text = std::fs::read_to_string(&path).unwrap();
+            assert_eq!(text.lines().count(), 6);
+            for line in text.lines().skip(1) {
+                assert!(
+                    line.contains("verdict=revert") && line.contains("no_fc"),
+                    "{line}"
+                );
+            }
+            let _ = std::fs::remove_file(&path);
+        });
     }
 
     #[test]
     fn a_ground_station_heartbeat_is_not_the_flight_controller() {
-        let mut vehicle = Vehicle::default();
-        let header = MavHeader {
-            system_id: 255,
-            component_id: 190,
-            sequence: 0,
-        };
-        apply_message(&mut vehicle, &header, &heartbeat(), 10);
-        assert_eq!(vehicle.fc_heartbeat_ms, None);
-        let px4 = MavMessage::HEARTBEAT(HEARTBEAT_DATA {
-            custom_mode: custom_mode(RecoveryMode::Rtl),
-            autopilot: MavAutopilot::MAV_AUTOPILOT_PX4,
-            ..Default::default()
+        host_pause::guard(|| {
+            let mut vehicle = Vehicle::default();
+            let header = MavHeader {
+                system_id: 255,
+                component_id: 190,
+                sequence: 0,
+            };
+            apply_message(&mut vehicle, &header, &heartbeat(), 10);
+            assert_eq!(vehicle.fc_heartbeat_ms, None);
+            let px4 = MavMessage::HEARTBEAT(HEARTBEAT_DATA {
+                custom_mode: custom_mode(RecoveryMode::Rtl),
+                autopilot: MavAutopilot::MAV_AUTOPILOT_PX4,
+                ..Default::default()
+            });
+            apply_message(&mut vehicle, &header, &px4, 20);
+            assert_eq!(vehicle.fc_heartbeat_ms, Some(20));
+            assert_eq!(
+                vehicle.fc_custom_mode.and_then(reported_mode),
+                Some(RecoveryMode::Rtl)
+            );
         });
-        apply_message(&mut vehicle, &header, &px4, 20);
-        assert_eq!(vehicle.fc_heartbeat_ms, Some(20));
-        assert_eq!(
-            vehicle.fc_custom_mode.and_then(reported_mode),
-            Some(RecoveryMode::Rtl)
-        );
     }
 
     #[test]
     fn a_non_finite_position_does_not_reset_the_fix_age() {
-        let mut vehicle = Vehicle::default();
-        let header = MavHeader::default();
-        let bad = MavMessage::LOCAL_POSITION_NED(LOCAL_POSITION_NED_DATA {
-            x: f32::NAN,
-            ..Default::default()
+        host_pause::guard(|| {
+            let mut vehicle = Vehicle::default();
+            let header = MavHeader::default();
+            let bad = MavMessage::LOCAL_POSITION_NED(LOCAL_POSITION_NED_DATA {
+                x: f32::NAN,
+                ..Default::default()
+            });
+            apply_message(&mut vehicle, &header, &bad, 10);
+            assert_eq!(vehicle.fix_ms, None);
+            let config = config(1, "unused.log");
+            let presented = present(&config, &vehicle, 10).unwrap();
+            assert!(!presented.fence_ok);
+            assert!(presented.record.fix_age_ms() > 1e300);
         });
-        apply_message(&mut vehicle, &header, &bad, 10);
-        assert_eq!(vehicle.fix_ms, None);
-        let config = config(1, "unused.log");
-        let presented = present(&config, &vehicle, 10).unwrap();
-        assert!(!presented.fence_ok);
-        assert!(presented.record.fix_age_ms() > 1e300);
     }
 
     #[test]
     fn reported_or_other_never_equals_recovery_when_unknown() {
-        for recovery in [RecoveryMode::Rtl, RecoveryMode::Loiter, RecoveryMode::Land] {
-            assert_ne!(reported_or_other(None, recovery), recovery);
-            assert_eq!(reported_or_other(Some(recovery), recovery), recovery);
-        }
+        host_pause::guard(|| {
+            for recovery in [RecoveryMode::Rtl, RecoveryMode::Loiter, RecoveryMode::Land] {
+                assert_ne!(reported_or_other(None, recovery), recovery);
+                assert_eq!(reported_or_other(Some(recovery), recovery), recovery);
+            }
+        });
     }
 }

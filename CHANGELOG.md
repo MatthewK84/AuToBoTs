@@ -6,6 +6,7 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Fixed
 
+- Stress failures classified (`docs/stress.md`). Two were whole-host pauses (VM snapshot and resume; `CLOCK_MONOTONIC` jumped seconds): every runtime test now runs under `host_pause::guard`, which reruns a test that failed across a gap of 1 s or more and reports `host paused`. One was a test assumption: under load the arm in `arm_after_ready_then_a_breach_sends_one_auto_rtl_and_disarm_is_monitor_only` could land on a stale fix, where `not_ready_at_arm` is correct; the test now checks that path and tries again for a ready arm. `scripts/sitl_px4.py` tells an `rta-host` deadline miss or a starved PX4 simulator from a result and runs that scenario once more. `scripts/stress.sh` added. No product change; the 5 ms deadline is unchanged.
 - `heartbeat_stale` is 1500 ms, not 1000 ms. PX4's 1 Hz onboard heartbeat reached an age of 1014 to 1035 ms between healthy beats, so the spec reverted a healthy vehicle; against PX4 SITL it sent RTL 2 s after takeoff.
 - After an `ACCEPTED` or `IN_PROGRESS` ack the next resend waits at least the `heartbeat_stale` limit, since PX4 reports the new mode only in its 1 Hz heartbeat. A 500 ms hold resent a `DO_SET_MODE` that had already taken.
 - PX4 recovery-mode encoding: `DO_SET_MODE` sends AUTO with the RTL, loiter, or land sub-mode, and `HEARTBEAT.custom_mode` is decoded as PX4 packs it (#195).

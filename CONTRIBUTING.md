@@ -35,7 +35,7 @@ A change to a timing-sensitive path (the runtime loop, the worker, the watchdog,
 
 ## Tests
 
-- Tests are deterministic. No random seed: property tests use a fixed seed (`crates/rta-host/tests/properties.rs`). A timing bound leaves room for a loaded runner. A flaky test is a bug. Fix it; do not retry it.
+- Tests are deterministic. No random seed: property tests use a fixed seed (`crates/rta-host/tests/properties.rs`). A timing bound leaves room for a loaded runner. A flaky test is a bug. Fix it; do not retry it. The one rerun is the host pause guard: a runtime test that fails across a whole-host pause (a monotonic-clock gap of 1 s or more, `crates/rta-host/src/host_pause.rs`) runs again, and the rerun stands. A failure with no pause is never retried (`docs/stress.md`). Stress the real-time tests with `bash scripts/stress.sh`.
 - A test asserts something. A test name says what it shows, and the test shows it.
 - A hazard control has a test tagged `// trace: Hn` in its flight module, listed in `docs/do178/trace.md`.
 
