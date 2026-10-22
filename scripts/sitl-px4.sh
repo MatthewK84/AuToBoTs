@@ -29,9 +29,11 @@ if [[ ! -d "$src/.git" ]]; then
   # clones have no tags, which the version header step reads.
   git -C "$src" submodule deinit -q -f platforms/nuttx/NuttX/nuttx platforms/nuttx/NuttX/apps
 fi
+# The release tag is annotated, so peel it to the commit it names before comparing.
+tagged=$(git -C "$src" rev-parse --verify -q "$PX4_TAG^{commit}" || true)
 commit=$(git -C "$src" rev-parse HEAD)
-if [[ "$commit" != "$PX4_COMMIT" ]]; then
-  echo "sitl-px4: $src is at $commit, not $PX4_TAG ($PX4_COMMIT)"
+if [[ "$tagged" != "$PX4_COMMIT" || "$commit" != "$PX4_COMMIT" ]]; then
+  echo "sitl-px4: $src is at $commit ($PX4_TAG names ${tagged:-nothing}), not $PX4_COMMIT"
   exit 1
 fi
 
@@ -49,7 +51,11 @@ if [[ ! -x "$src/build/px4_sitl_default/bin/px4" ]]; then
   }
 fi
 
-cargo build --locked -q -p rta-host --bin rta-host
+# Build with the pinned toolchain by name, from the repo root, so rustup reads no other
+# rust-toolchain file and installs no components (this build needs neither rustfmt nor
+# clippy). CI installs that toolchain once, minimal, before this script runs.
+toolchain=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$root/rust-toolchain.toml")
+(cd "$root" && RUSTUP_TOOLCHAIN="$toolchain" cargo build --locked -q -p rta-host --bin rta-host)
 echo "sitl-px4: PX4 $PX4_TAG ($PX4_COMMIT), SIH sihsim_quadx, headless"
 PX4_TAG=$PX4_TAG PX4_COMMIT=$PX4_COMMIT RTA_COMMIT=$(git rev-parse --short HEAD) \
   python scripts/sitl_px4.py "$src/build/px4_sitl_default" "$root/target/debug/rta-host" "$out_dir" "$@"

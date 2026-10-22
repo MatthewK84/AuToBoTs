@@ -25,6 +25,7 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 - CI jobs: a release build, an aarch64 (Jetson) cross-build, and a SITL smoke run against the stand-in peer (#206).
 - Simulated Jetson Orin Nano 8GB eval timing: `scripts/target-sim.sh` runs the aarch64 `rta-target` under qemu user mode and a scaled host model, 10,000 ticks each, with percentiles and a histogram, labelled `evidence=simulated`. `docs/target-timing.md` gives the assumptions and the board procedure. A CI `target-sim` smoke job.
 - `scripts/sitl-px4.sh`: `rta-host` against real PX4 v1.16.2 SITL (SIH, headless), with the startup gate, fence breach to RTL, loiter and land, a late start, and a probe of PX4's ACKs. Evidence in `crates/rta-host/fixtures/px4-sitl`, labelled PX4 SITL, not hardware. CI job `px4-sitl`.
+- CI `px4-sitl`: installs the pinned toolchain once (`rustup toolchain install 1.98.1 --profile minimal`), and `scripts/sitl-px4.sh` builds with `RUSTUP_TOOLCHAIN` from the repo root, so rustup adds no `rust-toolchain.toml` components there and cannot collide with a preinstalled `cargo-fmt`. The PX4 pin is checked against the annotated tag peeled to its commit (`v1.16.2^{commit}`) as well as `HEAD`.
 - `LICENSE` (Apache-2.0), `CONTRIBUTING.md`, this changelog, and `.gitignore`.
 - Process diagnostics from `rta-host` are single lines with a level and a component. `RTA_LOG` sets the lowest level shown (`docs/runtime.md`).
 
