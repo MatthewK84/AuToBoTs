@@ -54,6 +54,12 @@ The fallback steps (`NAV_RETURN_TO_LAUNCH`, `NAV_LAND`) went out from the probe,
 
 CI job `px4-sitl` runs the script on every push and pull request.
 
+### Host deadline misses
+
+PX4 SITL and `rta-host` share one host. A tick whose evaluation misses the 5 ms deadline latches Revert until restart, by design (`docs/deadline.md`), so on a loaded host a scenario can end in the fail-safe instead of the scenario. On the development box this was seen in an unloaded run (gate and land each missed once, `eval_ms=5`, against a usual 0) and in a run beside 16 busy loops (gate missed on tick 1 while disarmed, `eval_ms=7`, so the latch sent AUTO.RTL at the arm; land missed on its breach tick). Under the same load PX4's own SIH starved in the loiter run: PX4 logged `Preflight Fail: No valid data from Compass 0` and `Failsafe: blind land`, and landed at 0.74 m before the breach. `rta-host` then asked for AUTO.LOITER and PX4 answered `TEMPORARILY_REJECTED`; it sent DO_SET_MODE three times, NAV_RETURN_TO_LAUNCH three times, then NAV_LAND, which PX4 accepted, and confirmed AUTO.LAND from the heartbeat. That is the documented ladder against a PX4 that refuses.
+
+`scripts/sitl_px4.py` classifies both. A `late` tick that started the recovery is a host deadline miss, and PX4 console lines with `No valid data from` or `Failsafe activated` mark a starved simulator (neither appears in any unloaded run). The run is kept as `<scenario>.attempt1.json` with the reason, and the scenario runs once more. A second timing failure fails the scenario. A host timing failure is never reported as something PX4 or the switch logic got wrong. The deadline is not raised for SITL.
+
 ## Timing
 
 SITL timing is not target timing. The SITL log header carries that disclaimer, and the eval-duration distribution is written to `sitl-timing.txt`. Those numbers are a host-side sample, not a board measurement.

@@ -25,6 +25,8 @@ pub mod fail_closed;
 pub mod fault;
 pub mod fence;
 pub mod gate;
+#[cfg(test)]
+mod host_pause;
 pub mod link;
 pub mod link_age;
 pub mod mavlink_link;

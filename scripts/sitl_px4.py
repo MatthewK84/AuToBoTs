@@ -261,7 +261,22 @@ def run_scenario(name, build, host, out_dir, spec):
         except subprocess.TimeoutExpired:
             os.killpg(proc.pid, signal.SIGKILL)
         result["px4_events"] = watch.events
+        result["px4_sim_starved"] = sim_starved(os.path.join(work, "px4.out"))
     return result
+
+
+# PX4's own words when its simulator thread is starved of CPU: SIH sensor data stops arriving
+# on time and PX4 fails safe on its own. Never logged in an unloaded run (docs/sitl.md).
+STARVED = ("No valid data from", "Failsafe activated")
+
+
+def sim_starved(px4_out):
+    """The first PX4 console lines showing a starved simulator, if any."""
+    try:
+        lines = open(px4_out, errors="replace").read().splitlines()
+    except OSError:
+        return []
+    return [line.strip() for line in lines if any(mark in line for mark in STARVED)][:5]
 
 
 def excerpt(log_path):
@@ -303,7 +318,7 @@ def summarize(ticks, disarmed_ticks):
                 sends.append({"tick": int(row["tick"]), "step": reason[5:]})
             if reason.startswith("ack:"):
                 acks.append(reason[4:])
-            for key in ("recovery_pending", "recovery_confirmed", "recovery_unconfirmed", "heartbeat_stale", "fence"):
+            for key in ("recovery_pending", "recovery_confirmed", "recovery_unconfirmed", "heartbeat_stale", "fence", "late"):
                 if reason == key and key not in firsts:
                     firsts[key] = int(row["tick"])
         fresh_fix = float(row.get("fix_age_ms", "inf")) < 1e9
@@ -445,11 +460,50 @@ def check_probe(result):
     return problems
 
 
+def deadline_miss(result):
+    """The tick where rta-host missed its 5 ms evaluation deadline, when that miss is what
+    started the recovery, else None.
+
+    A missed deadline latches Revert by design (docs/sitl.md, "Host deadline misses"). On a
+    shared or loaded host it can happen in any scenario. The run then shows the fail-safe,
+    not the scenario, so it is reported as a host timing result and run again; it is never
+    counted as PX4 doing something wrong.
+    """
+    late = result.get("first_tick", {}).get("late")
+    sends = result.get("sends", [])
+    if late is None:
+        return None
+    if sends and sends[0]["tick"] < late:
+        return None
+    return late
+
+
+def host_timing(result, problems):
+    """Why a failed run says nothing about rta-host or PX4 logic, if it was host timing."""
+    if not problems or result.get("error"):
+        return None
+    late = deadline_miss(result)
+    if late is not None:
+        return (
+            f"host deadline miss: rta-host missed its 5 ms deadline at tick {late} and latched Revert "
+            "(the fail-safe, by design); this run cannot show the scenario"
+        )
+    if result.get("px4_sim_starved"):
+        return (
+            "PX4 simulator starved: PX4 lost SIH sensor data and failed safe on its own "
+            f"({result['px4_sim_starved'][0]}); this run cannot show the scenario"
+        )
+    return None
+
+
 def check(result):
     name = result["scenario"]
     problems = []
     if result.get("error"):
         return [result["error"]]
+    late = deadline_miss(result)
+    if late is not None:
+        return [host_timing(result, ["late"])]
     if result["disarmed_window_sends"]:
         problems.append("a recovery command went out while disarmed")
     if result["disarmed_window_gated"] < result["disarmed_window_ticks"]:
@@ -491,6 +545,20 @@ def main():
         else:
             result = run_scenario(name, build, host, out_dir, spec)
             result["problems"] = check(result)
+            timing = host_timing(result, result["problems"])
+            if timing:
+                # Host timing, not a result: one more run. The first is kept beside it, so the
+                # miss stays on record, and a second timing failure fails the scenario.
+                first = {**LABEL, **result, "host_timing": timing}
+                with open(os.path.join(out_dir, f"{name}.attempt1.json"), "w") as handle:
+                    json.dump(first, handle, indent=1)
+                print(f"sitl-px4: {name}: attempt 1: {timing}; running it again")
+                result = run_scenario(name, build, host, out_dir, spec)
+                result["problems"] = check(result)
+                result["earlier_attempts"] = [{"attempt": 1, "host_timing": timing}]
+                again = host_timing(result, result["problems"])
+                if again:
+                    result["host_timing"] = again
         result = {**LABEL, **result}
         failed |= bool(result["problems"])
         with open(os.path.join(out_dir, f"{name}.json"), "w") as handle:
