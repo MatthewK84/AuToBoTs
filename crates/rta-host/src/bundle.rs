@@ -17,6 +17,7 @@ pub struct Bundle {
     pub weights: Option<Vec<u8>>,
     pub previous_hash: String,
     pub new_hash: String,
+    pub notes_hash: String,
     pub signature: Option<String>,
 }
 
@@ -84,6 +85,7 @@ pub fn load_dir(running: &RunningSpec, dir: &Path) -> Result<RunningSpec, Bundle
             weights,
             previous_hash,
             new_hash,
+            notes_hash: String::new(),
             signature: signature.map(|text| text.trim().to_string()),
         },
     )
@@ -106,6 +108,7 @@ mod tests {
             weights: None,
             previous_hash: running.hash.clone(),
             new_hash: new_hash.clone(),
+            notes_hash: String::new(),
             signature: Some(sign_manifest(&running.hash, &new_hash)),
         }
     }

@@ -43,6 +43,7 @@ pub mod runtime;
 pub mod shadow;
 pub mod sitl;
 pub mod spec;
+pub mod spec_gate;
 pub mod stale;
 pub mod startup;
 pub mod tick;

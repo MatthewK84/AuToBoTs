@@ -5,11 +5,11 @@ A reload bundle is a directory. It is not a hot reload. Accepting a bundle does 
 ## Contents
 
 - `monitor.lola`, the candidate spec
-- `manifest`, two lines: `previous_hash` and `new_hash`
+- `manifest`, three lines: `previous_hash`, `new_hash`, and `notes_hash`
 - `manifest.sig`, a detached pin of the manifest bytes
 - `weights`, optional. A weight file in the bundle is not activated by acceptance.
 
-`previous_hash` is the pin of the running spec. `new_hash` is the pin of `monitor.lola`. The pin is the same non-cryptographic hash the tick log uses for `spec_hash`.
+`previous_hash` is the pin of the running spec. `new_hash` is the pin of `monitor.lola`. `notes_hash` is the pin of `docs/spec-notes.md`. The pin is the same non-cryptographic hash the tick log uses for `spec_hash`.
 
 ## Gate
 

@@ -150,6 +150,7 @@ mod tests {
             weights,
             previous_hash: running.hash.clone(),
             new_hash: new_hash.clone(),
+            notes_hash: String::new(),
             signature: Some(sign_manifest(&running.hash, &new_hash)),
         }
     }

@@ -24,6 +24,10 @@ jobs:
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace
       - run: cargo run --locked -q -p rta-host --bin rta-replay -- crates/rta-host/fixtures/golden spec/monitor.lola
+      - name: Spec change gate
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 || true)
+          echo "$CHANGED" | grep -q 'spec/monitor.lola' && ! echo "$CHANGED" | grep -q 'docs/spec-notes.md' && echo "spec change without notes" && exit 1 || true
 
   release:
     runs-on: ubuntu-latest
