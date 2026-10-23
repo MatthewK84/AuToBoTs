@@ -1,0 +1,3 @@
+# two tracks when the port allows one. expected: miss, not a pick
+100 0.9 20
+100 0.8 30

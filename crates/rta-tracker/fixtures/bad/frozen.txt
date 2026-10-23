@@ -1,0 +1,2 @@
+# frozen frame. same bytes, timestamp older than the hold. expected: miss
+0 aabbcc

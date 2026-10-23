@@ -1,0 +1,2 @@
+# confidence NaN from the detector. expected: miss
+100 NaN 20

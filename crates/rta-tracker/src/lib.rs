@@ -206,6 +206,51 @@ pub fn present(track: &TrackPort, now_ms: u64, hold_ms: u64, ever_seen: bool) ->
     }
 }
 
+/// One bad frame. The port emits one sample or a miss. It does not pick a track.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BadFrame {
+    Frozen { at_ms: u64 },
+    Empty,
+    NanConfidence,
+    TwoTracks,
+}
+
+/// Port output. A miss is confidence 0 under the M2.2 hold policy.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PortOutput {
+    Sample(TrackPort),
+    Miss,
+}
+
+/// Classify a bad frame. Two tracks are a miss, not a pick. NaN is a miss.
+pub fn classify(frame: &BadFrame, now_ms: u64, hold_ms: u64) -> PortOutput {
+    match frame {
+        BadFrame::Empty | BadFrame::NanConfidence | BadFrame::TwoTracks => PortOutput::Miss,
+        BadFrame::Frozen { at_ms } => {
+            if now_ms.saturating_sub(*at_ms) > hold_ms {
+                PortOutput::Miss
+            } else {
+                PortOutput::Sample(TrackPort {
+                    track_conf: 0.0,
+                    range_m: 0.0,
+                    sample_time_ms: *at_ms,
+                    age_ms: now_ms.saturating_sub(*at_ms),
+                })
+            }
+        }
+    }
+}
+
+/// A miss is confidence 0. That is the hold policy, not a second one.
+pub fn miss() -> TrackPort {
+    TrackPort {
+        track_conf: 0.0,
+        range_m: 0.0,
+        sample_time_ms: 0,
+        age_ms: 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +376,32 @@ mod tests {
         assert!(!host.contains("rta-tracker"));
         let own = include_str!("../Cargo.toml");
         assert!(!own.contains("gstreamer"));
+    }
+
+    #[test]
+    fn four_bad_frames_each_have_an_expected_port_output() {
+        let frozen = classify(&BadFrame::Frozen { at_ms: 0 }, 300, 200);
+        assert_eq!(frozen, PortOutput::Miss);
+        let empty = classify(&BadFrame::Empty, 100, 200);
+        assert_eq!(empty, PortOutput::Miss);
+        let nan = classify(&BadFrame::NanConfidence, 100, 200);
+        assert_eq!(nan, PortOutput::Miss);
+        let two = classify(&BadFrame::TwoTracks, 100, 200);
+        assert_eq!(two, PortOutput::Miss);
+        let held = miss();
+        assert_eq!(held.track_conf, 0.0);
+        for name in [
+            "frozen.txt",
+            "empty.txt",
+            "nan-confidence.txt",
+            "two-tracks.txt",
+        ] {
+            let path = Path::new("fixtures/bad").join(name);
+            let text = fs::read_to_string(&path).expect(name);
+            assert!(text.contains("expected: miss"), "{name}");
+        }
+        let switch = include_str!("../../rta-switch/src/lib.rs");
+        assert!(!switch.contains("BadFrame"));
+        assert!(!switch.contains("frame"));
     }
 }
