@@ -53,3 +53,13 @@ The tracker port contract. The tracker crate meets it. The switch does not impor
 | P-1 | Confidence shall be in 0 to 1. | `accept` | `confidence_outside_range_is_rejected` |
 | P-2 | Range shall be non-negative. | `accept` | `negative_range_is_rejected` |
 | P-3 | Sample time shall be monotonic. | `PortGate` | `a_step_back_in_sample_time_is_rejected` |
+
+## Timing
+
+Tick, deadline, and watchdog misses are shalls. The number comes from config. It is not copied here.
+
+| Id | Shall | Source | Test id |
+| --- | --- | --- | --- |
+| T-1 | The tick period shall be `tick.period_ms` from config. | `config/example.toml` | `period_comes_from_config` |
+| T-2 | The deadline shall be `tick.deadline_ms` from config. A late result is revert. | `config/example.toml` | `deadline_comes_from_config` |
+| T-3 | The watchdog shall trip after `tick.watchdog_misses` missed ticks. | `config/example.toml` | `watchdog_comes_from_config` |

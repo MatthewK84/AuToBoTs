@@ -237,3 +237,21 @@ fn port_shalls_are_in_the_requirement_file_and_the_switch_does_not_import_the_tr
     assert!(!switch.contains("rta-tracker"));
     assert!(!switch.contains("gstreamer"));
 }
+
+#[test]
+fn timing_shalls_link_and_a_hardcoded_deadline_fails() {
+    let timing = include_str!("../../../../docs/timing.md");
+    let req = include_str!("../../../../docs/requirements.md");
+    for id in ["T-1", "T-2", "T-3"] {
+        assert!(timing.contains(id), "{id}");
+        assert!(req.contains(id), "{id}");
+    }
+    assert!(timing.contains("tick.period_ms"));
+    assert!(timing.contains("tick.deadline_ms"));
+    assert!(timing.contains("tick.watchdog_misses"));
+    assert!(req.contains("from config"));
+    // A hardcoded deadline outside config fails review.
+    let host = include_str!("../../../rta-host/src/tick.rs");
+    assert!(!host.contains("deadline_ms = 5"));
+    assert!(!host.contains("const DEADLINE"));
+}
