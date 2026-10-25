@@ -43,3 +43,13 @@ Switch invariants written as shalls. Each names the enforcing type and a test id
 | D-1 | The system shall not emit setpoints and a mode change in the same tick. | `SwitchCommand` | `revert_has_no_commit_field` |
 | D-2 | The system shall not commit on inhibit. | `decide` | `inhibit_clears_commit` |
 | D-3 | A missing verdict shall be revert. | `decide_input` | `missing_verdict_is_revert` |
+
+## Port
+
+The tracker port contract. The tracker crate meets it. The switch does not import the tracker.
+
+| Id | Shall | Enforcing type | Test id |
+| --- | --- | --- | --- |
+| P-1 | Confidence shall be in 0 to 1. | `accept` | `confidence_outside_range_is_rejected` |
+| P-2 | Range shall be non-negative. | `accept` | `negative_range_is_rejected` |
+| P-3 | Sample time shall be monotonic. | `PortGate` | `a_step_back_in_sample_time_is_rejected` |

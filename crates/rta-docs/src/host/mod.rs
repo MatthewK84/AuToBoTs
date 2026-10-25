@@ -222,3 +222,18 @@ fn each_derived_shall_names_a_type_and_a_test_id() {
     assert!(derived.contains("decide"));
     assert!(derived.contains("decide_input"));
 }
+
+#[test]
+fn port_shalls_are_in_the_requirement_file_and_the_switch_does_not_import_the_tracker() {
+    let doc = include_str!("../../../../docs/requirements.md");
+    let port = doc.split("## Port").nth(1).expect("port section");
+    for id in ["P-1", "P-2", "P-3"] {
+        assert!(port.contains(id), "{id}");
+    }
+    assert!(port.contains("0 to 1"));
+    assert!(port.contains("non-negative"));
+    assert!(port.contains("monotonic"));
+    let switch = include_str!("../../../rta-switch/Cargo.toml");
+    assert!(!switch.contains("rta-tracker"));
+    assert!(!switch.contains("gstreamer"));
+}

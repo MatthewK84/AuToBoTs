@@ -24,6 +24,9 @@ jobs:
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace
       - run: cargo run --locked -q -p rta-host --bin rta-replay -- crates/rta-host/fixtures/golden spec/monitor.lola
+      - name: Switch does not depend on the tracker
+        run: |
+          grep -q 'rta-tracker' crates/rta-switch/Cargo.toml && echo "switch depends on tracker" && exit 1 || true
       - name: Spec change gate
         run: |
           CHANGED=$(git diff --name-only HEAD~1 || true)
