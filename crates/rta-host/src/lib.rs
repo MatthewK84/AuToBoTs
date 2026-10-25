@@ -37,6 +37,7 @@ pub mod quarantine;
 pub mod read;
 pub mod reason;
 pub mod recovery;
+pub mod release;
 pub mod replay;
 pub mod ring;
 pub mod runtime;
