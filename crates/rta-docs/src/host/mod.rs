@@ -197,3 +197,28 @@ fn a_requirements_only_diff_fails() {
         Ok(())
     );
 }
+
+#[test]
+fn each_derived_shall_names_a_type_and_a_test_id() {
+    let doc = include_str!("../../../../docs/requirements.md");
+    let derived = doc.split("## Derived").nth(1).expect("derived section");
+    let mut rows = 0;
+    for line in derived.lines() {
+        if !line.starts_with("| D-") {
+            continue;
+        }
+        rows += 1;
+        let cells: Vec<&str> = line
+            .split('|')
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+            .collect();
+        assert!(cells.len() >= 4, "{line}");
+        assert!(!cells[2].is_empty(), "enforcing type missing: {line}");
+        assert!(!cells[3].is_empty(), "test id missing: {line}");
+    }
+    assert_eq!(rows, 3);
+    assert!(derived.contains("SwitchCommand"));
+    assert!(derived.contains("decide"));
+    assert!(derived.contains("decide_input"));
+}

@@ -33,3 +33,13 @@ A method is `test`, `analysis`, or `review`. A blank method is a failed row. Thr
 ## Review
 
 A requirement change names the old shall, the new shall, and the tests that move with it. CI fails a requirements hunk with no test hunk. A requirements-only diff is refused.
+
+## Derived
+
+Switch invariants written as shalls. Each names the enforcing type and a test id. A row with no test id fails the table check.
+
+| Id | Shall | Enforcing type | Test id |
+| --- | --- | --- | --- |
+| D-1 | The system shall not emit setpoints and a mode change in the same tick. | `SwitchCommand` | `revert_has_no_commit_field` |
+| D-2 | The system shall not commit on inhibit. | `decide` | `inhibit_clears_commit` |
+| D-3 | A missing verdict shall be revert. | `decide_input` | `missing_verdict_is_revert` |
