@@ -121,3 +121,26 @@ fn the_release_checklist_maps_to_files() {
     assert!(doc.contains("dirty"));
     assert!(doc.contains("No in-flight learning bundle"));
 }
+
+#[test]
+fn the_notice_lists_each_direct_dependency_and_deny_matches() {
+    let notice = include_str!("../../../../docs/third-party.md");
+    let deny = include_str!("../../../../deny.toml");
+    for crate_name in [
+        "rtlola-interpreter",
+        "rtlola-frontend",
+        "mavlink",
+        "serde",
+        "toml",
+        "ordered-float",
+        "ctrlc",
+        "sha2",
+    ] {
+        assert!(notice.contains(crate_name), "{crate_name}");
+    }
+    assert!(notice.contains("does not link libgstreamer"));
+    assert!(deny.contains("Apache-2.0"));
+    assert!(deny.contains("priority-queue"));
+    assert!(deny.contains("serialport"));
+    assert!(notice.contains("A new copyleft dependency fails CI"));
+}
