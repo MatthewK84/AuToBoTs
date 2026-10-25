@@ -144,3 +144,22 @@ fn the_notice_lists_each_direct_dependency_and_deny_matches() {
     assert!(deny.contains("serialport"));
     assert!(notice.contains("A new copyleft dependency fails CI"));
 }
+
+#[test]
+fn every_common_mode_item_appears_and_no_row_is_closed() {
+    let residual = include_str!("../../../../docs/residual-risk.md");
+    let common = include_str!("../../../../docs/common-mode.md");
+    for item in [
+        "Wrong-but-fresh",
+        "Confident wrong track",
+        "Grant issued on bad information",
+        "Model error in the barrier",
+    ] {
+        assert!(residual.contains(item), "{item}");
+    }
+    assert!(common.contains("wrong-but-fresh"));
+    assert!(common.contains("confident wrong track"));
+    assert!(common.contains("grant issued on bad information"));
+    assert!(!residual.to_lowercase().contains("risk is closed"));
+    assert!(residual.contains("does not accept"));
+}
