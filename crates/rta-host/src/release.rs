@@ -19,20 +19,7 @@ mod tests {
     use super::{tag_allowed, TagError};
 
     #[test]
-    fn the_checklist_maps_to_files_and_a_dirty_index_is_refused() {
-        let doc = include_str!("../../../docs/release.md");
-        for item in [
-            "compile",
-            "coverage",
-            "docs/do178/sci.md",
-            "docs/target.md",
-            "docs/do178/ao-packet.md",
-            "docs/spec-notes.md",
-        ] {
-            assert!(doc.contains(item), "{item}");
-        }
-        assert!(doc.contains("dirty"));
-        assert!(doc.contains("No in-flight learning bundle"));
+    fn a_dirty_index_is_refused() {
         assert_eq!(tag_allowed(""), Ok(()));
         assert_eq!(tag_allowed(" M docs/release.md"), Err(TagError::Dirty));
     }

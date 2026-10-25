@@ -104,3 +104,20 @@ fn the_note_names_the_split_the_properties_and_the_fuzz_targets() {
         assert!(!manifest.contains("rta-docs"));
     }
 }
+
+#[test]
+fn the_release_checklist_maps_to_files() {
+    let doc = include_str!("../../../../docs/release.md");
+    for item in [
+        "compile",
+        "coverage",
+        "docs/do178/sci.md",
+        "docs/target.md",
+        "docs/do178/ao-packet.md",
+        "docs/spec-notes.md",
+    ] {
+        assert!(doc.contains(item), "{item}");
+    }
+    assert!(doc.contains("dirty"));
+    assert!(doc.contains("No in-flight learning bundle"));
+}
