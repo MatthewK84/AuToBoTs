@@ -255,3 +255,10 @@ fn timing_shalls_link_and_a_hardcoded_deadline_fails() {
     assert!(!host.contains("deadline_ms = 5"));
     assert!(!host.contains("const DEADLINE"));
 }
+
+#[test]
+fn the_safety_method_names_the_hazard_gate() {
+    let method = include_str!("../../../../docs/safety-method.md");
+    assert!(method.contains("spec-notes.md"));
+    assert!(method.contains("hazard hunk without a notes hunk fails CI"));
+}

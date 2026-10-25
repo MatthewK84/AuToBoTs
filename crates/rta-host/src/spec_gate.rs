@@ -50,8 +50,6 @@ mod tests {
         assert_eq!(hazard_gate(&with_notes), Ok(()));
         let hazards = ["docs/hazards.md"];
         assert_eq!(hazard_gate(&hazards), Err("hazard change without notes"));
-        let method = include_str!("../../../docs/safety-method.md");
-        assert!(method.contains("spec-notes.md"));
     }
 
     #[test]
