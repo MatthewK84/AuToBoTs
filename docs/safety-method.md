@@ -27,3 +27,7 @@ Before is the hazard with no monitor. After is the same hazard with the named co
 | H15 | Critical (2) | Occasional (C) | Remote (D) | host latch, test `a_fault_mid_swap_cannot_leave_the_command_path_on_the_new_spec` |
 
 After is not zero. Residual items stay residual. This table does not accept risk on anyone's behalf.
+
+## Change control
+
+A hazard-row edit requires a `docs/spec-notes.md` edit in the same change. The check is the same shape as the spec gate. A hazard hunk without a notes hunk fails CI.

@@ -21,9 +21,38 @@ pub fn gate(changed: &[&str]) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// A hazard-row edit requires the notes file in the same change.
+pub fn hazard_gate(changed: &[&str]) -> Result<(), &'static str> {
+    let hazard_changed = changed
+        .iter()
+        .any(|path| path.ends_with("docs/safety-method.md") || path.ends_with("docs/hazards.md"));
+    if !hazard_changed {
+        return Ok(());
+    }
+    let notes_changed = changed
+        .iter()
+        .any(|path| path.ends_with("docs/spec-notes.md"));
+    if !notes_changed {
+        return Err("hazard change without notes");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::gate;
+    use super::{gate, hazard_gate};
+
+    #[test]
+    fn a_hazard_hunk_without_a_notes_hunk_fails() {
+        let changed = ["docs/safety-method.md"];
+        assert_eq!(hazard_gate(&changed), Err("hazard change without notes"));
+        let with_notes = ["docs/safety-method.md", "docs/spec-notes.md"];
+        assert_eq!(hazard_gate(&with_notes), Ok(()));
+        let hazards = ["docs/hazards.md"];
+        assert_eq!(hazard_gate(&hazards), Err("hazard change without notes"));
+        let method = include_str!("../../../docs/safety-method.md");
+        assert!(method.contains("spec-notes.md"));
+    }
 
     #[test]
     fn a_spec_hunk_without_a_notes_hunk_fails() {
