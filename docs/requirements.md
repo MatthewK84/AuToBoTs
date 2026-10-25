@@ -29,3 +29,7 @@ Frozen shall statements. Each row has an id, a hazard id, and a verification met
 ## Verification
 
 A method is `test`, `analysis`, or `review`. A blank method is a failed row. Thresholds are not copied from `docs/spec-notes.md`.
+
+## Review
+
+A requirement change names the old shall, the new shall, and the tests that move with it. CI fails a requirements hunk with no test hunk. A requirements-only diff is refused.

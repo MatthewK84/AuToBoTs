@@ -163,3 +163,37 @@ fn every_common_mode_item_appears_and_no_row_is_closed() {
     assert!(!residual.to_lowercase().contains("risk is closed"));
     assert!(residual.contains("does not accept"));
 }
+
+/// A requirements change requires a test hunk.
+pub fn requirements_gate(changed: &[&str]) -> Result<(), &'static str> {
+    let req = changed.iter().any(|p| p.ends_with("docs/requirements.md"));
+    if !req {
+        return Ok(());
+    }
+    let test = changed
+        .iter()
+        .any(|p| p.contains("tests/") || p.ends_with("_test.rs") || p.contains("/tests.rs"));
+    if !test {
+        return Err("requirements change without a test hunk");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_requirements_only_diff_fails() {
+    let doc = include_str!("../../../../docs/requirements.md");
+    assert!(doc.contains("old shall"));
+    assert!(doc.contains("new shall"));
+    assert!(doc.contains("tests that move"));
+    assert_eq!(
+        requirements_gate(&["docs/requirements.md"]),
+        Err("requirements change without a test hunk")
+    );
+    assert_eq!(
+        requirements_gate(&[
+            "docs/requirements.md",
+            "crates/rta-host/tests/properties.rs"
+        ]),
+        Ok(())
+    );
+}
