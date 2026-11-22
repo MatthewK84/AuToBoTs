@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M111–M112, M121, M129: message rate limits in the ICD, unsupported message drop noted, single-track rule documented, tracker dependency fence already enforced by the compile job.
+
+
+
 - M115–M117, M128: setpoint silence on revert is already enforced by the switch (Mode/Idle only on Revert). Heartbeat component id is config-sourced. Link-loss and heartbeat-loss are separate age fields and reason codes in the tick log. Log schema has no image field; version unchanged.
 
 

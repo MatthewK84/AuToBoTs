@@ -62,3 +62,5 @@ Secret scanning should be enabled on the repository. Example configs contain no 
 
 Current state: not confirmed by this task (gap).  
 Intended state: main rejects a direct push; required checks listed above must pass.
+
+The switch does not depend on the tracker or on gstreamer. The compile job greps `crates/rta-switch/Cargo.toml` for `rta-tracker` and fails if present.
