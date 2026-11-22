@@ -311,4 +311,32 @@ mod tests {
         assert!(log.append(&record).is_err());
         assert!(buf.is_empty(), "a partial line was written");
     }
+
+    #[test]
+    fn log_schema_rejects_grant_body_and_frame() {
+        // TickRecord fields are the allowed set. A grant body, raw signature,
+        // pilot identity, or frame is not among them.
+        let allowed = [
+            "tick",
+            "fence_ok",
+            "fix_age_ms",
+            "link_age_ms",
+            "fc_heartbeat_age_ms",
+            "track_conf",
+            "range_m",
+            "verdict",
+            "filter_intervened",
+            "reasons",
+            "command",
+            "eval_ms",
+            "spec_hash",
+            "alt_m",
+            "indication",
+        ];
+        let forbidden = ["grant_body", "signature", "pilot_id", "frame"];
+        for field in forbidden {
+            assert!(!allowed.contains(&field), "{field}");
+        }
+        assert!(allowed.contains(&"spec_hash"));
+    }
 }

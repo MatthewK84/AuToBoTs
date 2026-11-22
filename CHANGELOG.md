@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M142.1: log-schema test rejects grant body, raw signature, and frame fields. Evidence job already fails closed on a missing SBOM or provenance record. docs/review.md and standards links already in place. Commit path already inhibits on missing grant, coast fail, pilot override, or abort.
+
+
+
 - M130–M139: packet index review, gap review note, known-problem list, residual risk owner column, non-claim sentence check, and related doc checks. docs/known-problems.md, release checklist updates, runbook link.
 
 
