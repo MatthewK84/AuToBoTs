@@ -162,6 +162,22 @@ PX4 SITL (headless, SIH quadrotor) is the `px4-sitl` CI job. See [docs/sitl.md](
 
 ---
 
+
+## Missing features
+
+These paths have scaffolding or documentation on `main`. They are not yet driven by live flight-controller or sensor inputs.
+
+| Residual | Current behavior |
+| --- | --- |
+| Energy to rally | Host publishes a large default endurance |
+| Estimator health | `estimator_ok` defaults to true |
+| Mission phase / abort / coast | Hooks exist with safe defaults |
+| Grant window | `GrantClock` is unit-tested, not yet in the live tick |
+| Protected entity / deconfliction | Documented only |
+| Log schema | Test rejects grant body and frame |
+
+See [docs/known-problems.md](docs/known-problems.md).
+
 ## Non-claims
 
 This repository does not implement a weapon, a fuze, or a release actuator.  
@@ -173,4 +189,4 @@ No sentence in this packet claims that the repository meets DoDD 3000.09 or DoWI
 
 ## License and status
 
-Developmental. Every crate is `0.1.0`. No version has been tagged. See [CHANGELOG.md](CHANGELOG.md).
+Developmental. Every crate is `0.1.0`. No version has been tagged. Apache License, Version 2.0. See `LICENSE`. See [CHANGELOG.md](CHANGELOG.md).
