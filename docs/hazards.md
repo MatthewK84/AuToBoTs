@@ -38,6 +38,6 @@ Hot reload is not a non-hazard and it is not out of scope. Unsigned reload, fixt
 
 ## Later rows
 
-M140 adds pilot override, energy to rally, estimator health, mission phase, abort of a sent commit, coast quality, protected-entity inhibit, traffic, and grant-time conversion. Those issues own their rows. They are not silently covered by H1 through H10.
+M140 adds pilot override (closed), energy to rally (host publishes the two numbers; switch trips), estimator health, mission phase, abort of a sent commit, coast quality, protected-entity inhibit, traffic, and grant-time conversion. Those issues own their rows. They are not silently covered by H1 through H10.
 
 | H16 | Pilot override (stick, mode change off guided/offboard, or RC takeover) | Host reads FC reported mode and RC override bit each tick | Inhibit (latched until resume to guided and config allows); Revert still wins |

@@ -4,6 +4,12 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ## [Unreleased]
 
+### Added
+
+- Energy to rally (M140.2): host publishes endurance_s and time_to_rally_s. The switch `energy_ok` reverts when endurance does not strictly exceed time-to-rally. Missing battery is not yet decoded from the flight controller, so the host publishes a large default until that message is wired. Acceptance tests in the switch cover the low and missing cases. Reason code `energy`.
+
+
+
 ### Fixed
 
 - cargo-deny advisory RUSTSEC-2026-0542 (humantime unmaintained, transitive via rtlola-interpreter). Documented waiver with expiry condition in docs/waivers.md and deny.toml. No safe upgrade available.

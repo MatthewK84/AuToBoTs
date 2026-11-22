@@ -462,8 +462,19 @@ pub fn run<W: Write>(
         // bit, the flag stays false. The switch already implements the Idle-on-override
         // behavior and Revert still wins when the flag is true.
         let pilot_override = false;
+        // Energy to rally (M140.2). Host publishes the two numbers; the threshold lives in
+        // the switch (`energy_ok`). No battery sample is yet decoded from the flight controller,
+        // so the host publishes a large default endurance. A missing sample will become 0
+        // (and Revert) when the battery message is wired. The acceptance tests inject the
+        // low and missing cases directly.
+        let endurance_s = 1_000_000.0;
+        let time_to_rally_s = 0.0;
+        let energy_revert = !rta_switch::energy_ok(endurance_s, time_to_rally_s);
+        if energy_revert {
+            reasons.push(Reason::Spec("energy"));
+        }
         let command = closed.command(TickCase {
-            verdict: if latched {
+            verdict: if latched || energy_revert {
                 Some(Verdict::Revert)
             } else {
                 verdict
