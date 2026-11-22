@@ -62,14 +62,14 @@ fn decide_variants_are_exclusive() {
 #[kani::proof]
 fn revert_never_yields_setpoints() {
     let request = any_request();
-    let command = decide(Verdict::Revert, request, any_mode(), any_mode());
+    let command = decide(Verdict::Revert, request, any_mode(), any_mode(), false);
     assert!(!matches!(command, SwitchCommand::Setpoints { .. }));
 }
 
 #[kani::proof]
 fn inhibit_never_yields_commit() {
     let request = any_request();
-    let command = decide(Verdict::Inhibit, request, any_mode(), any_mode());
+    let command = decide(Verdict::Inhibit, request, any_mode(), any_mode(), false);
     if let SwitchCommand::Setpoints { commit, .. } = command {
         assert!(!commit);
     }

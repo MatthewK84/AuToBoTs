@@ -396,7 +396,13 @@ mod tests {
             (Verdict::Pass, None, false),
         ];
         for (verdict, request, mode) in rows {
-            let command = decide(verdict, request, rta_spec::RecoveryMode::Loiter, recovery, false);
+            let command = decide(
+                verdict,
+                request,
+                rta_spec::RecoveryMode::Loiter,
+                recovery,
+                false,
+            );
             assert_eq!(matches!(command, SwitchCommand::Mode { .. }), mode);
             if let SwitchCommand::Setpoints { commit, .. } = command {
                 assert!(!commit || verdict == Verdict::Pass);
@@ -627,7 +633,11 @@ mod tests {
             rta_spec::RecoveryMode::Rtl,
             true, // pilot override, but Revert wins
         );
-        assert!(matches!(command, SwitchCommand::Mode { recovery: rta_spec::RecoveryMode::Rtl }));
+        assert!(matches!(
+            command,
+            SwitchCommand::Mode {
+                recovery: rta_spec::RecoveryMode::Rtl
+            }
+        ));
     }
-
 }

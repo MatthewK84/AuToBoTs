@@ -76,7 +76,13 @@ impl FailClosed {
             self.note("late verdict discarded");
         }
         if forced {
-            decide(Verdict::Revert, None, tick.reported, tick.recovery, tick.pilot_override)
+            decide(
+                Verdict::Revert,
+                None,
+                tick.reported,
+                tick.recovery,
+                tick.pilot_override,
+            )
         } else {
             decide(
                 tick.verdict.unwrap_or(Verdict::Revert),

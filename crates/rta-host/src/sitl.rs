@@ -176,7 +176,13 @@ mod tests {
         .unwrap_err();
         assert_eq!(timed, FilterFault::Timeout);
         let verdict = Verdict::Revert;
-        let command = decide(verdict, None, RecoveryMode::Loiter, RecoveryMode::Rtl, false);
+        let command = decide(
+            verdict,
+            None,
+            RecoveryMode::Loiter,
+            RecoveryMode::Rtl,
+            false,
+        );
         assert!(matches!(command, rta_switch::SwitchCommand::Mode { .. }));
     }
 

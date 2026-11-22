@@ -222,7 +222,13 @@ mod tests {
 
     #[test]
     fn recovered_report_sends_nothing() {
-        let command = decide(Verdict::Revert, None, RecoveryMode::Rtl, RecoveryMode::Rtl, false);
+        let command = decide(
+            Verdict::Revert,
+            None,
+            RecoveryMode::Rtl,
+            RecoveryMode::Rtl,
+            false,
+        );
         assert!(to_message(&command, FC, 0).is_none());
         assert_eq!(reported_mode(0x0504_0000), Some(RecoveryMode::Rtl));
     }
