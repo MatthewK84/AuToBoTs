@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M106–M110: interpreter pin review note, spec comment rule, reason code registry, verdict mapping review line, dialect pin repeated in ICD and dependencies.
+
+
+
 - M111–M112, M121, M129: message rate limits in the ICD, unsupported message drop noted, single-track rule documented, tracker dependency fence already enforced by the compile job.
 
 

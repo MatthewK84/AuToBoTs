@@ -21,3 +21,5 @@ Dialect is `common` only. Default features are off, so `dialect-ardupilotmega` i
 ## Dependency update policy (M64.1)
 
 A dependency bump is its own change. Include the `cargo deny` output. If the interpreter version moves, re-run the golden replay and name the run in the commit. Spec behavior is re-replayed when the interpreter moves.
+
+The interpreter pin is reviewed when it changes. The review note is the replay result.

@@ -30,3 +30,5 @@ H9 is unreachable: a command cannot be both setpoints and a mode change. The tab
 A mode change off offboard/guided or an RC takeover suppresses setpoints and commit in the same tick (`SwitchCommand::Idle`). The latch holds Inhibit until the pilot returns the aircraft to the guided/offboard mode and a config flag permits resume. Revert still wins: recovery is commanded only if the pilot has released the sticks and a revert hazard is true.
 
 Reason code: `pilot_override`.
+
+Pass, Inhibit, Revert stay the only variants. The mapping table is reviewed when the enum changes.

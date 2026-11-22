@@ -29,3 +29,5 @@ These match the non-hazards in `docs/hazards.md`. They are not rows and this spe
 - Rules of engagement, beyond the signed grant already required for commit.
 - Tracker truth. A tracker that is confident and wrong still passes `weak_track`. Smoke and a decoy are this case.
 - Estimator truth beyond age. An estimator that is fresh and wrong still passes `fix_stale`.
+
+A threshold without a comment naming the hazard id fails review.
