@@ -29,3 +29,35 @@ The example is the reviewed parameter item. A comment at the top says it is not 
 ## Flight config diff
 
 A flight file is a named path with its own hash. The diff against example is an open item until a flight file exists.
+
+## File descriptors
+
+The host holds the link socket and the log file. A leak test opens and closes a short run and checks the count.
+
+## Socket reconnect
+
+A dropped socket latches Revert and retries the mode command. Reconnect does not clear the latch.
+
+## Partial write
+
+A short write is a write failure. It latches Revert. It does not retry the setpoint half.
+
+## Tracker backpressure
+
+The appsink is leaky. A slow detector drops frames and ages the sample. It does not block the host tick.
+
+## Queue bound
+
+Inbound messages are bounded. Overflow drops the oldest and ages the input. Overflow is a log field.
+
+## Drop policy
+
+Drop oldest, never drop the revert decision. A full queue cannot erase a pending Revert.
+
+## Overload degrade
+
+Over deadline, the degrade row is Revert, not a quieter Pass.
+
+## Config schema
+
+The TOML has a schema version. An unknown version refuses to start. Unknown keys error.

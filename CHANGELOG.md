@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M83–M91: file descriptor bound, socket reconnect, partial write, tracker backpressure, queue bound, drop policy, overload degrade, config schema version, unknown field policy.
+
+
+
 - M92–M96, M102–M105: config range checks, default refusal, example config review, flight config diff, fence polygon validation, trigger code stability, threshold change diff, spec vector file, spec eval budget.
 
 
