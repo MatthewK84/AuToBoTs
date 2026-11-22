@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M140.9: GrantClock records the wall-to-monotonic offset at startup. remaining_ms is computed from the frozen offset. A wall step larger than the bound latches grant inhibit. Missing or negative offset refuses the grant path. Tests cover forward jump, backward jump, and missing clock.
+
+
+
 - M141.1–M141.5: SBOM, build provenance, continuous test evidence, log redaction, and human accountability notes. docs/sbom.md, docs/provenance.md, docs/test-evidence.md, docs/log-format.md forbidden fields, docs/review.md. Standards file links them.
 
 
