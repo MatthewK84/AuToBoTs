@@ -33,3 +33,15 @@ The file is flushed every `log.flush_every_n` records.
 `rta-replay <log> <spec>` re-evaluates each record. A verdict mismatch prints the tick, expected verdict, actual verdict, and the input record, then exits non-zero.
 
 Golden traces live in `crates/rta-host/fixtures/golden`. Each file names a hazard id (`hazard=H1` through `hazard=H6`, or `hazard=none` for the pass case). CI runs `rta-replay` on that directory. A NaN altitude is rejected before the spec and the host verdict is revert.
+
+## Forbidden fields
+
+The tick log stores reason codes, ages, verdicts, and grant hashes. It does not store:
+
+- the grant signature payload
+- pilot identity
+- a video frame
+
+Hashes are allowed. Raw signatures are not. A test fails if a grant token body is written to the log.
+
+This is the acceptance record for M141.4.

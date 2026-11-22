@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M141.1–M141.5: SBOM, build provenance, continuous test evidence, log redaction, and human accountability notes. docs/sbom.md, docs/provenance.md, docs/test-evidence.md, docs/log-format.md forbidden fields, docs/review.md. Standards file links them.
+
+
+
 - Estimator health, mission phase, abort, coast, protected-entity, and deconfliction scaffolding (M140.3–M140.8). Host publishes the bits with safe defaults so existing tests stay green. The switch `decide_input` already implements the gates (estimator_ok false → Recovery/Revert, phase Abort or abort_requested → Abort, coast_ok false → Inhibit). docs/common-mode.md names the estimator stream as the control. Real FC flag and operator/mission wiring remain residuals.
 
 

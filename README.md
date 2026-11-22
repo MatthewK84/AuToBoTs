@@ -171,6 +171,7 @@ The example config is `config/example.toml`. A missing or invalid file exits bef
 
 ## Read next
 - [Assumptions](docs/assumptions.md)
+- [SBOM](docs/sbom.md), [provenance](docs/provenance.md), [test evidence](docs/test-evidence.md)
 - [Constraints](docs/constraints.md)
 - [Open items](docs/open-items.md)
 - [Tests](docs/tests.md)
