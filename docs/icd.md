@@ -13,3 +13,5 @@ The unit-test byte blob is a stand-in: `1` plus a little-endian altitude in mill
 The tracker trait returns confidence, range, and sample time. The in-tree fake can be scripted. It is not a video decoder.
 
 Outbound heartbeats stay at 1 Hz. Setpoints stay at the tick rate.
+
+If the first heartbeat seen uses this component's system id and component id, startup fails. The companion does not talk over the flight controller.

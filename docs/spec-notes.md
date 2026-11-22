@@ -31,3 +31,21 @@ These match the non-hazards in `docs/hazards.md`. They are not rows and this spe
 - Estimator truth beyond age. An estimator that is fresh and wrong still passes `fix_stale`.
 
 A threshold without a comment naming the hazard id fails review.
+
+## Rally point
+
+The rally point is inside the trip line, not on it. An outside rally refuses startup.
+
+## Output streams
+
+Every output stream is listed here. A stream in the file and not in the notes fails the spec gate. An output stream the host does not read is allowed only if the notes say why. Silent streams fail review.
+
+| Stream | Read by host | Note |
+| --- | --- | --- |
+| revert | yes | |
+| inhibit | yes | |
+| fix_stale | yes | |
+| link_stale | yes | |
+| heartbeat_stale | yes | |
+| weak_track | yes | |
+| inside_commit | yes | |

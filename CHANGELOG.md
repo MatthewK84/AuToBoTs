@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M97–M101: rally point validation note, recovery mode enum, system id collision check, spec stream inventory, unused stream check.
+
+
+
 - M106–M110: interpreter pin review note, spec comment rule, reason code registry, verdict mapping review line, dialect pin repeated in ICD and dependencies.
 
 

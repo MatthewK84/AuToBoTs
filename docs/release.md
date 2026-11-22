@@ -42,3 +42,5 @@ Confirm these sentences are still present. A release fails review if they are go
 - This repository does not implement a weapon, a fuze, or a release actuator.
 - SITL is not operational test.
 - A wrong-but-fresh position estimate remains a residual.
+
+Recovery mode enum is rtl, loiter, land. Any other string fails config load.
