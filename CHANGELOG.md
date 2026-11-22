@@ -4,6 +4,15 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ## [Unreleased]
 
+### Added
+
+- Assumption log (`docs/assumptions.md`), constraint log (`docs/constraints.md`), open-item log (`docs/open-items.md`).
+- Unit/integration/regression inventory and flaky-test policy in `docs/tests.md`.
+- DO-178 deviation record stub (`docs/do178/deviations.md`).
+- CI required-checks, retention, secret-scanning, and branch-protection notes.
+- Dependency update policy and release-branch rule notes.
+
+
 ### Fixed
 
 - Stress failures classified (`docs/stress.md`). Two were whole-host pauses (VM snapshot and resume; `CLOCK_MONOTONIC` jumped seconds): every runtime test now runs under `host_pause::guard`, which reruns a test that failed across a gap of 1 s or more and reports `host paused`. One was a test assumption: under load the arm in `arm_after_ready_then_a_breach_sends_one_auto_rtl_and_disarm_is_monitor_only` could land on a stale fix, where `not_ready_at_arm` is correct; the test now checks that path and tries again for a ready arm. `scripts/sitl_px4.py` tells an `rta-host` deadline miss or a starved PX4 simulator from a result and runs that scenario once more. `scripts/stress.sh` added. No product change; the 5 ms deadline is unchanged.

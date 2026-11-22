@@ -38,3 +38,12 @@ Tool versions are from `docs/dependencies.md`. The switch content hash is the ha
 A reload bundle from M13 is a new index row, not an edit to an old row. The old row stays. The new row records the new spec hash, the new switch content hash if the crate changed, and the new config hash if the config changed.
 
 The bundle swap procedure says the index updates in the same change as the swap. A swap that lands without a new index row is incomplete. See `docs/reload-bundle.md`.
+
+## Build provenance (M63.1)
+
+Configuration index fields for a tagged build: commit SHA, CI run URL.  
+A tag with no run URL is a gap row. Example:
+
+| Item | SHA | CI run |
+| --- | --- | --- |
+| (example) | e881e93 | (link to the green run for that commit) |

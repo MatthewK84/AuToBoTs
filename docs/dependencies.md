@@ -17,3 +17,7 @@ Dialect is `common` only. Default features are off, so `dialect-ardupilotmega` i
 `cargo test --workspace` does not enable `verify`, so it does not build Kani. The solver is not required.
 
 `deny.toml` allows MIT, Apache-2.0, and BSD-3-Clause. The advisory job is separate from compile so a network failure there does not hide a build failure.
+
+## Dependency update policy (M64.1)
+
+A dependency bump is its own change. Include the `cargo deny` output. If the interpreter version moves, re-run the golden replay and name the run in the commit. Spec behavior is re-replayed when the interpreter moves.

@@ -170,6 +170,11 @@ Apache License, Version 2.0. See `LICENSE`.
 The example config is `config/example.toml`. A missing or invalid file exits before a socket. The predicate source is `spec/monitor.lola`.
 
 ## Read next
+- [Assumptions](docs/assumptions.md)
+- [Constraints](docs/constraints.md)
+- [Open items](docs/open-items.md)
+- [Tests](docs/tests.md)
+
 
 - [Hazards](docs/hazards.md)
 - [Verdicts](docs/verdicts.md)

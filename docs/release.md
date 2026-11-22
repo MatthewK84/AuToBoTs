@@ -21,3 +21,8 @@ A release tag is cut from main at a green commit. A tag from a dirty tree is ref
 4. Bundle files (`weights`, candidate specs, quarantine output) are not tagged.
 
 The tag names the commit. It does not name a branch tip.
+
+## Release branch rule (M69.1)
+
+A release tag is cut from main at a green commit. A tag from a dirty tree is refused by the checklist. Hot-reload bundles are not release artifacts.
+

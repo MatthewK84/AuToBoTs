@@ -43,3 +43,22 @@ The runner image is `ubuntu-latest`, still floating (`docs/do178/sci.md`).
 Both workflows set `permissions: contents: read` at the top. No job can write to the repository, a release, a package, or a pull request.
 
 `close-named-issue` is the only job with more: `contents: read` and `issues: write`, for `gh issue close`. It runs only on push to `main`. It reads the number only from a whole line `Issue: #N` (or `Issue: N`) in the commit message, so a mention of "Issue:" inside prose does not close anything. It still closes whatever issue number that line names. Whether to keep the job is an owner decision.
+
+## Required checks (M61.1)
+
+Intended required set on main: `compile`, `deny`, `release`, `aarch64`, `coverage`.  
+Kani (`prove`) is non-blocking.  
+Current branch-protection setting is a gap if it does not enforce these; the repository setting is not changed by this task.
+
+## Artifact retention (M62.1)
+
+Coverage and target-measurement artifacts are retained for 90 days or until the next release tag, whichever is longer. A release points at the artifact name (`switch-coverage`, target-timing logs), not a disappeared log. Linked from the ground-release checklist.
+
+## Secret scanning (M67.1)
+
+Secret scanning should be enabled on the repository. Example configs contain no live credentials. Gap if the setting is off.
+
+## Branch protection (M68.1)
+
+Current state: not confirmed by this task (gap).  
+Intended state: main rejects a direct push; required checks listed above must pass.
