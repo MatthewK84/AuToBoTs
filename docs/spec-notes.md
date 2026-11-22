@@ -49,3 +49,23 @@ Every output stream is listed here. A stream in the file and not in the notes fa
 | heartbeat_stale | yes | |
 | weak_track | yes | |
 | inside_commit | yes | |
+
+## Fence polygon
+
+A polygon with fewer than three points, or a self-intersection the checker can see, is fence_ok false.
+
+## Trigger code stability
+
+Reason codes are an enum in rta-spec. A new code is a version bump for the log.
+
+## Threshold change
+
+A threshold literal change in the spec requires a fixture update and a notes update. CI checks both.
+
+## Spec vectors
+
+Vectors live in spec/vectors.json. The oracle and the fixtures share them.
+
+## Spec eval budget
+
+Spec eval has its own budget inside the deadline, start at 2 ms. Over budget is Revert even if the result is pass.

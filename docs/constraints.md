@@ -13,3 +13,19 @@ Group 1–3 bounds. A task that breaks a constraint says so in the same change.
 | Complex function | Never reaches socket | Switch is the only constructor of an outbound command |
 
 The shadow-net compile-out rule is a hard row. See `docs/shadow-net.md`.
+
+## Config range checks
+
+`period_ms`, `deadline_ms`, and `watchdog_misses` have upper bounds as well as the existing lower bounds. A zero period is an error.
+
+## Default refusal
+
+Missing recovery mode is an error. There is no RTL default in code.
+
+## Example config
+
+The example is the reviewed parameter item. A comment at the top says it is not a flight file.
+
+## Flight config diff
+
+A flight file is a named path with its own hash. The diff against example is an open item until a flight file exists.

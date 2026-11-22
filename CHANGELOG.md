@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M92–M96, M102–M105: config range checks, default refusal, example config review, flight config diff, fence polygon validation, trigger code stability, threshold change diff, spec vector file, spec eval budget.
+
+
+
 - M97–M101: rally point validation note, recovery mode enum, system id collision check, spec stream inventory, unused stream check.
 
 
