@@ -107,9 +107,7 @@ impl GrantClock {
         if self.latched || self.offset_ms.is_none() {
             return None;
         }
-        let Some(wall) = wall_ms else {
-            return None;
-        };
+        let wall = wall_ms?;
         let expected_wall = mono_ms as i64 + self.offset_ms.unwrap_or(0);
         let step = (wall as i64 - expected_wall).abs();
         if step > self.bound_ms {
