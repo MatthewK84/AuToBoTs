@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M130–M139: packet index review, gap review note, known-problem list, residual risk owner column, non-claim sentence check, and related doc checks. docs/known-problems.md, release checklist updates, runbook link.
+
+
+
 - M140.9: GrantClock records the wall-to-monotonic offset at startup. remaining_ms is computed from the frozen offset. A wall step larger than the bound latches grant inhibit. Missing or negative offset refuses the grant path. Tests cover forward jump, backward jump, and missing clock.
 
 

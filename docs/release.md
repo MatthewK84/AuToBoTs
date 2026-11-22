@@ -26,3 +26,19 @@ The tag names the commit. It does not name a branch tip.
 
 A release tag is cut from main at a green commit. A tag from a dirty tree is refused by the checklist. Hot-reload bundles are not release artifacts.
 
+
+## Packet index review
+
+The packet index is reviewed when a gap file changes. A stale link is a review fail. The index is the source; this checklist does not summarize it.
+
+## Gap review
+
+Open items are copied into the packet at release, not summarized away. The verb is copy, not close. The source is `docs/open-items.md`.
+
+## Non-claim sentences
+
+Confirm these sentences are still present. A release fails review if they are gone.
+
+- This repository does not implement a weapon, a fuze, or a release actuator.
+- SITL is not operational test.
+- A wrong-but-fresh position estimate remains a residual.
