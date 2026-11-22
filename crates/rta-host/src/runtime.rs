@@ -457,7 +457,7 @@ pub fn run<W: Write>(
         }
         // Pilot override: main mode is not OFFBOARD (and we have heard a heartbeat).
         // Stick, mode change off guided/offboard, or RC takeover. Revert still wins.
-        let pilot_override = vehicle.fc_custom_mode.map_or(false, |cm| {
+        let pilot_override = vehicle.fc_custom_mode.is_some_and(|cm| {
             let main = ((cm >> 16) & 0xFF) as u8;
             main != crate::command_out::PX4_MAIN_MODE_OFFBOARD
         });
