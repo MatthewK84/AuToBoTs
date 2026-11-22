@@ -45,3 +45,7 @@ The tick log stores reason codes, ages, verdicts, and grant hashes. It does not 
 Hashes are allowed. Raw signatures are not. A test fails if a grant token body is written to the log.
 
 This is the acceptance record for M141.4.
+
+## No image field
+
+The tick log schema has no image field. Format version is unchanged by this note. A review fails if an image field is added without a version bump and an explicit out-of-scope reversal.

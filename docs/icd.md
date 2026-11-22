@@ -11,3 +11,5 @@ The unit-test byte blob is a stand-in: `1` plus a little-endian altitude in mill
 `link_age_ms` is time since the last received message from the configured endpoint, excluding `STATUSTEXT`. The bench has no separate command stream, so a position or a heartbeat counts. The age is updated at the start of the tick, before the spec runs. No message yet is an age larger than the spec limit, so the first verdict is `Revert`.
 
 The tracker trait returns confidence, range, and sample time. The in-tree fake can be scripted. It is not a video decoder.
+
+Outbound heartbeats stay at 1 Hz. Setpoints stay at the tick rate.

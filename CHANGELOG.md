@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M115–M117, M128: setpoint silence on revert is already enforced by the switch (Mode/Idle only on Revert). Heartbeat component id is config-sourced. Link-loss and heartbeat-loss are separate age fields and reason codes in the tick log. Log schema has no image field; version unchanged.
+
+
+
 - M142.1: log-schema test rejects grant body, raw signature, and frame fields. Evidence job already fails closed on a missing SBOM or provenance record. docs/review.md and standards links already in place. Commit path already inhibits on missing grant, coast fail, pilot override, or abort.
 
 
