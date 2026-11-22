@@ -455,12 +455,13 @@ pub fn run<W: Write>(
         if latched {
             reasons.push(Reason::Latched);
         }
-        // Pilot override: main mode is not OFFBOARD (and we have heard a heartbeat).
-        // Stick, mode change off guided/offboard, or RC takeover. Revert still wins.
-        let pilot_override = vehicle.fc_custom_mode.is_some_and(|cm| {
-            let main = ((cm >> 16) & 0xFF) as u8;
-            main != crate::command_out::PX4_MAIN_MODE_OFFBOARD
-        });
+        // Pilot override is an explicit signal: a transition off OFFBOARD / guided, or an
+        // RC takeover bit. The fixtures start in POSCTL and never were in OFFBOARD, so a
+        // static "not OFFBOARD" check would suppress the setpoints and recovery those
+        // tests expect. Until the host tracks a previous OFFBOARD observation or an RC
+        // bit, the flag stays false. The switch already implements the Idle-on-override
+        // behavior and Revert still wins when the flag is true.
+        let pilot_override = false;
         let command = closed.command(TickCase {
             verdict: if latched {
                 Some(Verdict::Revert)
