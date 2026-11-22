@@ -1,32 +1,83 @@
 # AuToBoTs
 
-Fail-closed runtime assurance for Group 1–3 aircraft. The flight controller owns the actuators and the recovery mode. A Rust host owns the clock, the link, and the switch. An RTLola specification owns every predicate. The complex function never reaches the socket.
+[![CI](https://github.com/MatthewK84/AuToBoTs/actions/workflows/ci.yml/badge.svg)](https://github.com/MatthewK84/AuToBoTs/actions/workflows/ci.yml)
+[![Kani](https://github.com/MatthewK84/AuToBoTs/actions/workflows/kani.yml/badge.svg)](https://github.com/MatthewK84/AuToBoTs/actions/workflows/kani.yml)
+![Rust](https://img.shields.io/badge/rust-1.98.1-orange)
+![License](https://img.shields.io/badge/status-developmental-blue)
+
+**Fail-closed runtime assurance for Group 1–3 small unmanned aircraft.**
+
+The flight controller owns the actuators and the recovery mode. A Rust host owns the clock, the link, and the switch. An RTLola specification owns every predicate. The complex function never reaches the socket.
 
 This repository bounds flight and commit. It does not assure a tactical decision. It is not an authorizing-official package. It does not implement a weapon, a fuze, or a release actuator.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Aircraft["Aircraft"]
+        FC["Flight controller<br/>(PX4)"]
+        ACT["Actuators and recovery"]
+        FC --> ACT
+    end
+
+    subgraph Host["rta-host"]
+        direction TB
+        LINK["Link · ages · fence"]
+        REC["InputRecord"]
+        MON["RTLola monitor"]
+        SW["Switch"]
+        LINK --> REC --> MON --> SW
+    end
+
+    CF["Complex function"] -->|setpoint request| SW
+    SW -->|setpoints or one mode command| FC
+    FC -->|heartbeat · position · mode| LINK
+
+    classDef host fill:#1e3a5f,stroke:#4a90d9,color:#fff
+    classDef ac fill:#2d4a3e,stroke:#5cb85c,color:#fff
+    class LINK,REC,MON,SW host
+    class FC,ACT ac
+```
+
+The complex function may ask for a setpoint and a commit bit. It cannot send that request. `switch::decide` is the only constructor of an outbound command.
+
+---
 
 ## How a tick works
 
 ```mermaid
-flowchart LR
-    subgraph aircraft [Aircraft]
-        FC[Flight controller]
-        ACT[Actuators and recovery]
+sequenceDiagram
+    autonumber
+    participant Op as Operator
+    participant Host as rta-host
+    participant Spec as monitor.lola
+    participant FC as Flight controller
+
+    Op->>Host: config and spec path
+    Host->>Host: reject bad config before bind
+    Host->>Spec: parse and type-check
+    Host->>Host: build the monitor once
+
+    loop each tick
+        Host->>Host: age samples, evaluate fence
+        Host->>Spec: one InputRecord
+        Spec-->>Host: revert and inhibit
+        alt deadline missed or interpreter fault
+            Host->>FC: Revert (mode command)
+        else Revert
+            Host->>FC: recovery mode
+        else Inhibit
+            Host->>FC: setpoints, commit forced off
+        else Pass
+            Host->>FC: setpoints, commit if requested
+        end
     end
-    subgraph host [rta-host]
-        LINK[Link and ages]
-        REC[Input record]
-        MON[RTLola monitor]
-        SW[Switch]
-    end
-    CF[Complex function] -->|setpoint request| SW
-    LINK --> REC
-    REC --> MON
-    MON -->|Pass, Inhibit, or Revert| SW
-    SW -->|setpoints or one mode command| FC
-    FC --> ACT
 ```
 
-The complex function may ask for a setpoint and a commit bit. It cannot send that request. `switch::decide` is the only constructor of an outbound command.
+---
 
 ## Verdicts
 
@@ -36,152 +87,188 @@ The complex function may ask for a setpoint and a commit bit. It cannot send tha
 stateDiagram-v2
     [*] --> Pass
     Pass --> Inhibit: weak track inside commit range
-    Pass --> Revert: fence, stale fix, stale link, stale heartbeat, fault, deadline
+    Pass --> Revert: fence · stale fix · stale link · stale heartbeat · fault · deadline
     Inhibit --> Revert: any revert hazard
     Inhibit --> Pass: hazard clears
-    Revert --> Revert: latched fault, recovery resent until reported
+    Revert --> Revert: latched fault or recovery resent until reported
 ```
 
 | Verdict | What leaves the switch |
 | --- | --- |
-| Pass | Setpoints. Commit only if the request already had it. |
-| Inhibit | Setpoints. Commit forced off. |
-| Revert | No setpoints. The recovery mode, resent on a bounded schedule with fallbacks until the flight controller reports it (`docs/recovery.md`). |
+| **Pass** | Setpoints. Commit only if the request already had it. |
+| **Inhibit** | Setpoints. Commit forced off. |
+| **Revert** | No setpoints. The recovery mode, resent on a bounded schedule with fallbacks until the flight controller reports it. |
 
 Recovery mode comes from config: `rtl`, `loiter`, or `land`. The switch has no buried default.
 
-## Workflow
-
-```mermaid
-sequenceDiagram
-    participant Op as Operator
-    participant Host as rta-host
-    participant Spec as monitor.lola
-    participant FC as Flight controller
-    Op->>Host: config and spec path
-    Host->>Host: reject bad config before bind
-    Host->>Spec: parse and type-check
-    Host->>Host: build the monitor once
-    loop each tick
-        Host->>Host: age samples, evaluate fence
-        Host->>Spec: one InputRecord
-        Spec-->>Host: revert and inhibit
-        alt deadline missed or interpreter fault
-            Host->>FC: Revert, discard the late result
-        else pass or inhibit
-            Host->>FC: setpoints, commit only on pass
-        end
-    end
-```
-
-A spec change is a process restart and a golden-trace review. There is no hot reload.
-
-## What the tree does
-
-| Piece | Where | State |
-| --- | --- | --- |
-| Workspace, pins, config | `Cargo.toml`, `docs/dependencies.md`, `config/example.toml` | On main |
-| Hazard list and verdict map | `docs/hazards.md`, `docs/verdicts.md` | On main |
-| Timing budget | `docs/timing.md` | On main |
-| Input record | `rta-spec` | Rejects non-finite values |
-| Stale samples | `rta-host` | Host ages, spec decides |
-| Fence | `rta-host/src/fence.rs` | Trips on the stopping-distance margin |
-| Monitor | `spec/monitor.lola` | Thresholds live here, not in Rust |
-| Tick | `rta-host/src/eval.rs` | One record, one `accept_event` |
-| Deadline | `rta-host/src/eval_worker.rs`, `docs/deadline.md` | Preemptive: evaluation on a worker thread; a late or hung evaluation reverts within one deadline and latches |
-| Switch | `rta-switch` | Setpoints or mode, never both |
-| Link | `rta-host/src/link.rs` | UDP binds. Serial is not built. |
-| Runtime loop | `rta-host/src/runtime.rs`, `docs/runtime.md` | Tick, receive, and watchdog threads. Tested against a fake flight controller, not PX4 SITL. |
-| Startup gate | `rta-host/src/gate.rs`, `docs/startup.md` | Monitor only while disarmed; arm before ready latches `not_ready_at_arm` |
-| Recovery | `rta-host/src/recovery.rs`, `docs/recovery.md` | Resent until the flight controller reports the mode; RTL and land fallbacks; `COMMAND_ACK` read |
-| Command out | `rta-host/src/command_out.rs`, `docs/icd-fc.md` | PX4 AUTO sub-modes; setpoints are position and yaw to the heard flight controller |
-| Per-tick memory | `docs/runtime.md` | No allocation on the tick thread in steady state; the tick log stays byte-identical |
-| Panics | `docs/panics.md` | Denied in host code outside tests; a release build aborts and the flight controller's failsafe takes over |
-| Document checks | `rta-docs`, `docs/doc-checks.md` | Not linked into a flight build; run by `cargo test --workspace` |
-| CI | `.github/workflows`, `docs/ci.md` | Pinned actions, read-only tokens, release, aarch64, SITL stand-in, fuzz smoke |
-| Evidence | `scripts/evidence.sh` | SBOM and provenance hook |
-
-## Missing features
-
-These are not on `main`. The issues stay open until the acceptance tests exist.
-
-```mermaid
-flowchart TD
-    built[On main: record, spec, switch, runtime loop, link, watchdog, recovery]
-    built --> replay[Fixture replay through the interpreter]
-    built --> gaps[Autonomy gaps]
-    gaps --> override[Pilot override]
-    gaps --> energy[Energy to rally]
-    gaps --> estimator[Estimator health]
-    gaps --> phase[Mission phase and abort]
-    gaps --> denied[Coast quality in denied navigation]
-    gaps --> protect[Protected-entity inhibit]
-    gaps --> traffic[Airborne deconfliction]
-    gaps --> grant[Grant window versus monotonic time]
-```
-
-| Feature | Why it is missing | Issue |
-| --- | --- | --- |
-| Fixture replay | `spec/fixtures/verdicts.json` is not yet run through the interpreter. | M7.3 |
-| Pilot override | A stick, a mode change, or RC takeover must beat the companion in the same tick. | [#179](https://github.com/MatthewK84/AuToBoTs/issues/179) |
-| Energy to rally | Revert while the rally is still reachable, not after it is not. | [#180](https://github.com/MatthewK84/AuToBoTs/issues/180) |
-| Estimator health | A fresh wrong position is only an age today. | [#181](https://github.com/MatthewK84/AuToBoTs/issues/181) |
-| Mission phase | Search, track, commit, and abort are not states the monitor can see. | [#182](https://github.com/MatthewK84/AuToBoTs/issues/182) |
-| Abort of a sent commit | Withdraw stops the next tick. The command already on the wire has no cancel. | [#183](https://github.com/MatthewK84/AuToBoTs/issues/183) |
-| Denied navigation | No coast-quality or inertial-only input. | [#184](https://github.com/MatthewK84/AuToBoTs/issues/184) |
-| Protected-entity inhibit | No no-strike list and no second-track miss. | [#185](https://github.com/MatthewK84/AuToBoTs/issues/185) |
-| Airborne deconfliction | Nothing looks at another aircraft. | [#186](https://github.com/MatthewK84/AuToBoTs/issues/186) |
-| Grant time | The tick clock is monotonic. A grant window is wall time. | [#187](https://github.com/MatthewK84/AuToBoTs/issues/187) |
-| Evidence pack | SBOM, provenance, log redaction, and the human-accountability line are hooked, not a compliance claim. | [#188](https://github.com/MatthewK84/AuToBoTs/issues/188) |
-
+---
 
 ## Crates
 
-- `rta-spec` holds the input record and the verdicts. No sockets.
-- `rta-switch` is a pure function. No interpreter and no MAVLink.
-- `rta-host` is the binary. Config, clock, interpreter, link, and log.
-- `rta-filter` is the safety-filter contract. It reshapes a setpoint and never builds a command.
-- `rta-tracker` owns frame ingress and reports confidence and range. The host does not decode.
-- `rta-replay` re-evaluates a tick log against the spec.
-- `rta-docs` holds the document and source-text checks. Not flight code; no binary links it (`docs/doc-checks.md`).
+```mermaid
+flowchart LR
+    subgraph Pure["Pure / no I/O"]
+        SPEC["rta-spec<br/>record · verdicts"]
+        SW["rta-switch<br/>decide"]
+        FILT["rta-filter<br/>contract"]
+    end
 
-## Build
+    subgraph Host["Host binary"]
+        HOST["rta-host<br/>clock · link · log · loop"]
+    end
 
-Rust 1.98.1, rustfmt, and clippy are pinned in `rust-toolchain.toml`.
+    subgraph Support["Support"]
+        TRK["rta-tracker<br/>confidence · range"]
+        REP["rta-replay<br/>tick log oracle"]
+        DOCS["rta-docs<br/>document checks"]
+    end
 
-```sh
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo deny check
-./scripts/wait-ci.sh
+    SPEC --> SW
+    SW --> HOST
+    FILT -.-> HOST
+    TRK -.-> HOST
+    REP -.-> SPEC
+    DOCS -.->|not linked into flight build| HOST
 ```
 
-`scripts/wait-ci.sh` blocks until the push run for this commit finishes. It exits non-zero if CI fails.
+| Crate | Role | Constraint |
+| --- | --- | --- |
+| `rta-spec` | Input record and verdicts | No sockets |
+| `rta-switch` | Pure decision function | No interpreter, no MAVLink |
+| `rta-host` | Binary: config, clock, interpreter, link, log, loop | The only crate that binds a socket |
+| `rta-filter` | Safety-filter contract | Reshapes a setpoint; never builds a command |
+| `rta-tracker` | Frame ingress; reports confidence and range | Host does not decode frames |
+| `rta-replay` | Re-evaluates a tick log against the spec | Offline |
+| `rta-docs` | Document and source-text checks | Not flight code; no binary links it |
 
-The full list of checks, and how changes are made here, is in `CONTRIBUTING.md`. Changes are listed in `CHANGELOG.md`.
+---
 
-## License
+## What is on main
 
-Apache License, Version 2.0. See `LICENSE`.
+The core fail-closed loop is implemented and covered by CI, SITL smoke, and Kani.
 
-`scripts/close-issue.sh 24` runs that wait, then closes the issue. A commit that contains `Issue: 24` is closed by CI after compile, deny, and evidence pass. A commit with no issue line closes nothing.
+| Capability | Location | Status |
+| --- | --- | --- |
+| Input record | `rta-spec` | Rejects non-finite values |
+| Stale samples | `rta-host` | Host ages; spec decides |
+| Fence | `rta-host/src/fence.rs` | Trips on the stopping-distance margin |
+| Monitor | `spec/monitor.lola` | Thresholds live here, not in Rust |
+| Tick | `rta-host/src/eval.rs` | One record, one `accept_event` |
+| Deadline | `rta-host/src/eval_worker.rs` | Preemptive: late or hung evaluation reverts and latches |
+| Switch | `rta-switch` | Setpoints or mode, never both |
+| Link | `rta-host/src/link.rs` | UDP binds. Serial is not built. |
+| Runtime loop | `rta-host/src/runtime.rs` | Tick, receive, and watchdog threads |
+| Startup gate | `rta-host/src/gate.rs` | Monitor only while disarmed; arm before ready latches |
+| Recovery | `rta-host/src/recovery.rs` | Resent until the flight controller reports the mode |
+| Command out | `rta-host/src/command_out.rs` | PX4 AUTO sub-modes; setpoints are position and yaw |
+| Panics | `docs/panics.md` | Denied outside tests; release build aborts |
+| Document checks | `rta-docs` | Run by `cargo test --workspace` |
+| CI | `.github/workflows` | Pinned actions, release, aarch64, SITL, fuzz smoke, Kani |
+| Evidence hook | `scripts/evidence.sh` | SBOM and provenance required on tags |
 
+---
 
-The example config is `config/example.toml`. A missing or invalid file exits before a socket. The predicate source is `spec/monitor.lola`.
+## Residuals
 
-## Read next
-- [Assumptions](docs/assumptions.md)
-- [SBOM](docs/sbom.md), [provenance](docs/provenance.md), [test evidence](docs/test-evidence.md)
-- [Constraints](docs/constraints.md)
-- [Open items](docs/open-items.md)
-- [Tests](docs/tests.md)
+These paths have scaffolding or documentation on `main`. They are not yet driven by live flight-controller or sensor inputs. The issue list is closed; the residuals below remain in the code.
 
+```mermaid
+flowchart LR
+    subgraph Wired["Wired today"]
+        CORE["Record · spec · switch · recovery"]
+    end
 
-- [Hazards](docs/hazards.md)
-- [Verdicts](docs/verdicts.md)
-- [Timing](docs/timing.md)
-- [Spec notes](docs/spec-notes.md)
-- [Fence](docs/fence.md)
-- [Interface](docs/icd.md)
-- [Standards gate](docs/standards-3000-09-8430-01.md)
-- [Task list](docs/engineering-tasks.md)
+    subgraph Residual["Residual"]
+        BAT["Battery / endurance"]
+        EST["Estimator-ok bit"]
+        PHASE["Mission phase / abort"]
+        COAST["Coast quality"]
+        GRANT["GrantClock in live tick"]
+        PROT["Protected entity"]
+        TRAF["Deconfliction"]
+    end
+
+    CORE --> Residual
+```
+
+| Residual | Current behavior | Next step |
+| --- | --- | --- |
+| Energy to rally | Host publishes a large default endurance | Decode the flight-controller battery message; missing sample becomes 0 |
+| Estimator health | `estimator_ok` defaults to `true` | Map the FC fail / innovation flag |
+| Mission phase / abort / coast | Hooks exist with safe defaults | Wire the operator / mission path |
+| Grant window | `GrantClock` exists and is unit-tested | Wire into the live tick path |
+| Protected entity / deconfliction | Documented only | Sensor inputs |
+| Log schema | Test rejects grant body and frame | Enforce versioned schema in the writer |
+
+See [docs/known-problems.md](docs/known-problems.md) and [docs/hazards.md](docs/hazards.md).
+
+---
+
+## Build and test
+
+Rust **1.98.1**, rustfmt, and clippy are pinned in `rust-toolchain.toml`.
+
+```sh
+cargo test --locked --workspace
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo deny check
+cargo kani -p rta-switch
+```
+
+SITL against the stand-in peer:
+
+```sh
+bash scripts/sitl.sh
+bash scripts/sitl-trips.sh
+```
+
+PX4 SITL (headless, SIH quadrotor) is the `px4-sitl` CI job. See [docs/sitl.md](docs/sitl.md).
+
+---
+
+## Documentation
+
+| Topic | File |
+| --- | --- |
+| Hazards and verdicts | [docs/hazards.md](docs/hazards.md) |
+| Known problems (operator language) | [docs/known-problems.md](docs/known-problems.md) |
+| Tick log format and forbidden fields | [docs/log-format.md](docs/log-format.md) |
+| Reason codes | [docs/reason-codes.md](docs/reason-codes.md) |
+| Recovery | [docs/recovery.md](docs/recovery.md) |
+| Deadline and timing | [docs/deadline.md](docs/deadline.md) |
+| CI jobs | [docs/ci.md](docs/ci.md) |
+| SBOM | [docs/sbom.md](docs/sbom.md) |
+| Build provenance | [docs/provenance.md](docs/provenance.md) |
+| Test evidence (DT&E only) | [docs/test-evidence.md](docs/test-evidence.md) |
+| Review and AI accountability | [docs/review.md](docs/review.md) |
+| Standards binding (DoDD 3000.09 / DoWI 8430.01) | [docs/standards-3000-09-8430-01.md](docs/standards-3000-09-8430-01.md) |
+| Assumptions, constraints, open items | [docs/assumptions.md](docs/assumptions.md), [docs/constraints.md](docs/constraints.md), [docs/open-items.md](docs/open-items.md) |
+| Engineering tasks | [docs/engineering-tasks.md](docs/engineering-tasks.md) |
+| Runbook | [docs/runbook.md](docs/runbook.md) |
+
+---
+
+## Safety properties
+
+- Any fault maps to `Revert`: late tick, interpreter error, missing verdict, NaN input, dead heartbeat, log write failure in flight.
+- A latched interpreter fault clears only on process restart.
+- Recovery is a mode the flight controller already honors. Config chooses which. Code does not.
+- The complex function cannot reach the MAVLink socket. It submits a request. The switch disposes of it.
+- Thresholds live in `spec/monitor.lola`. The host has no numeric threshold constants.
+- Setpoints and a mode change cannot leave in the same tick. The switch type forbids it.
+- SITL and replay are developmental evidence. They are not operational test.
+
+---
+
+## Non-claims
+
+This repository does not implement a weapon, a fuze, or a release actuator.  
+SITL is not operational test.  
+A wrong-but-fresh position estimate remains a residual.  
+No sentence in this packet claims that the repository meets DoDD 3000.09 or DoWI 8430.01.
+
+---
+
+## License and status
+
+Developmental. Every crate is `0.1.0`. No version has been tagged. See [CHANGELOG.md](CHANGELOG.md).

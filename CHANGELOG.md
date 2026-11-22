@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- Professional README: architecture, tick, and crate diagrams; honest status and residual tables; documentation map; safety properties and non-claims.
+
+
+
 - M70–M73, M113–M114, M118–M120, M122–M127: log rotation and integrity, clock drift, tick overrun, command and mode ack, captured link replay, dialect mismatch, tracker sample clock, confidence and range checks, hold limit, detector timeout, pipeline restart, frame drop.
 
 
