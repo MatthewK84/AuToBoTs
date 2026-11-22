@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M70–M73, M113–M114, M118–M120, M122–M127: log rotation and integrity, clock drift, tick overrun, command and mode ack, captured link replay, dialect mismatch, tracker sample clock, confidence and range checks, hold limit, detector timeout, pipeline restart, frame drop.
+
+
+
 - M74–M82: deadline, heartbeat, grant, shadow, filter, and reload counters; memory budget, hot-path allocation, and stack bound notes.
 
 
