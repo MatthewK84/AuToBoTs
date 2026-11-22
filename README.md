@@ -1,5 +1,8 @@
 # AuToBoTs
 
+![AuToBoTs](docs/images/banner.jpg)
+
+
 [![CI](https://github.com/MatthewK84/AuToBoTs/actions/workflows/ci.yml/badge.svg)](https://github.com/MatthewK84/AuToBoTs/actions/workflows/ci.yml)
 [![Kani](https://github.com/MatthewK84/AuToBoTs/actions/workflows/kani.yml/badge.svg)](https://github.com/MatthewK84/AuToBoTs/actions/workflows/kani.yml)
 ![Rust](https://img.shields.io/badge/rust-1.98.1-orange)
@@ -15,32 +18,7 @@ This repository bounds flight and commit. It does not assure a tactical decision
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    subgraph Aircraft["Aircraft"]
-        FC["Flight controller<br/>(PX4)"]
-        ACT["Actuators and recovery"]
-        FC --> ACT
-    end
-
-    subgraph Host["rta-host"]
-        direction TB
-        LINK["Link · ages · fence"]
-        REC["InputRecord"]
-        MON["RTLola monitor"]
-        SW["Switch"]
-        LINK --> REC --> MON --> SW
-    end
-
-    CF["Complex function"] -->|setpoint request| SW
-    SW -->|setpoints or one mode command| FC
-    FC -->|heartbeat · position · mode| LINK
-
-    classDef host fill:#1e3a5f,stroke:#4a90d9,color:#fff
-    classDef ac fill:#2d4a3e,stroke:#5cb85c,color:#fff
-    class LINK,REC,MON,SW host
-    class FC,ACT ac
-```
+![Architecture](docs/images/architecture.jpg)
 
 The complex function may ask for a setpoint and a commit bit. It cannot send that request. `switch::decide` is the only constructor of an outbound command.
 
@@ -48,34 +26,7 @@ The complex function may ask for a setpoint and a commit bit. It cannot send tha
 
 ## How a tick works
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Op as Operator
-    participant Host as rta-host
-    participant Spec as monitor.lola
-    participant FC as Flight controller
-
-    Op->>Host: config and spec path
-    Host->>Host: reject bad config before bind
-    Host->>Spec: parse and type-check
-    Host->>Host: build the monitor once
-
-    loop each tick
-        Host->>Host: age samples, evaluate fence
-        Host->>Spec: one InputRecord
-        Spec-->>Host: revert and inhibit
-        alt deadline missed or interpreter fault
-            Host->>FC: Revert (mode command)
-        else Revert
-            Host->>FC: recovery mode
-        else Inhibit
-            Host->>FC: setpoints, commit forced off
-        else Pass
-            Host->>FC: setpoints, commit if requested
-        end
-    end
-```
+![How a tick works](docs/images/tick.jpg)
 
 ---
 
@@ -83,15 +34,7 @@ sequenceDiagram
 
 `Revert` beats `Inhibit` beats `Pass`.
 
-```mermaid
-stateDiagram-v2
-    [*] --> Pass
-    Pass --> Inhibit: weak track inside commit range
-    Pass --> Revert: fence · stale fix · stale link · stale heartbeat · fault · deadline
-    Inhibit --> Revert: any revert hazard
-    Inhibit --> Pass: hazard clears
-    Revert --> Revert: latched fault or recovery resent until reported
-```
+![Verdicts](docs/images/verdicts.jpg)
 
 | Verdict | What leaves the switch |
 | --- | --- |
@@ -105,31 +48,7 @@ Recovery mode comes from config: `rtl`, `loiter`, or `land`. The switch has no b
 
 ## Crates
 
-```mermaid
-flowchart LR
-    subgraph Pure["Pure / no I/O"]
-        SPEC["rta-spec<br/>record · verdicts"]
-        SW["rta-switch<br/>decide"]
-        FILT["rta-filter<br/>contract"]
-    end
-
-    subgraph Host["Host binary"]
-        HOST["rta-host<br/>clock · link · log · loop"]
-    end
-
-    subgraph Support["Support"]
-        TRK["rta-tracker<br/>confidence · range"]
-        REP["rta-replay<br/>tick log oracle"]
-        DOCS["rta-docs<br/>document checks"]
-    end
-
-    SPEC --> SW
-    SW --> HOST
-    FILT -.-> HOST
-    TRK -.-> HOST
-    REP -.-> SPEC
-    DOCS -.->|not linked into flight build| HOST
-```
+![Crates](docs/images/crates.jpg)
 
 | Crate | Role | Constraint |
 | --- | --- | --- |
@@ -172,24 +91,7 @@ The core fail-closed loop is implemented and covered by CI, SITL smoke, and Kani
 
 These paths have scaffolding or documentation on `main`. They are not yet driven by live flight-controller or sensor inputs. The issue list is closed; the residuals below remain in the code.
 
-```mermaid
-flowchart LR
-    subgraph Wired["Wired today"]
-        CORE["Record · spec · switch · recovery"]
-    end
-
-    subgraph Residual["Residual"]
-        BAT["Battery / endurance"]
-        EST["Estimator-ok bit"]
-        PHASE["Mission phase / abort"]
-        COAST["Coast quality"]
-        GRANT["GrantClock in live tick"]
-        PROT["Protected entity"]
-        TRAF["Deconfliction"]
-    end
-
-    CORE --> Residual
-```
+![Residuals](docs/images/residuals.jpg)
 
 | Residual | Current behavior | Next step |
 | --- | --- | --- |
