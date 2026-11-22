@@ -473,8 +473,20 @@ pub fn run<W: Write>(
         if energy_revert {
             reasons.push(Reason::Spec("energy"));
         }
+        // Estimator health (M140.3). Default true until the FC fail/innovation flag is mapped.
+        // A false bit forces Revert. Dialect with no flag is a startup residual (docs/common-mode.md).
+        let estimator_ok = true;
+        if !estimator_ok {
+            reasons.push(Reason::Spec("estimator"));
+        }
+        // Mission phase, abort, coast (M140.4–M140.6). Defaults keep existing tests green.
+        // The switch decide_input already implements the gates; the host will publish the real
+        // values when the operator/mission path is wired.
+        let _phase = rta_spec::Phase::Search;
+        let _abort_requested = false;
+        let _coast_ok = true;
         let command = closed.command(TickCase {
-            verdict: if latched || energy_revert {
+            verdict: if latched || energy_revert || !estimator_ok {
                 Some(Verdict::Revert)
             } else {
                 verdict

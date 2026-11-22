@@ -15,7 +15,7 @@ A shared input is one measurement consumed by more than one control. This note l
 
 The fence check, the barrier, and the shadow net all consume the same position estimate. A wrong-but-fresh estimate defeats all three. The control is the fix-age stream plus the grant window. That is not an independent measurement. There is no second position source on this aircraft.
 
-The estimator-ok bit is the trip M140.3 owns. A healthy flag that is wrong stays a residual. This note does not close it.
+The estimator-ok bit (spec stream `estimator_bad`, reason `estimator`) is the control M140.3 owns. A fresh position with `estimator_ok` false is Revert. A healthy flag that is wrong stays a residual. The host publishes the bit; the threshold lives in the switch.
 
 ## What is not claimed
 

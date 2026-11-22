@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- Estimator health, mission phase, abort, coast, protected-entity, and deconfliction scaffolding (M140.3–M140.8). Host publishes the bits with safe defaults so existing tests stay green. The switch `decide_input` already implements the gates (estimator_ok false → Recovery/Revert, phase Abort or abort_requested → Abort, coast_ok false → Inhibit). docs/common-mode.md names the estimator stream as the control. Real FC flag and operator/mission wiring remain residuals.
+
+
+
 - Energy to rally (M140.2): host publishes endurance_s and time_to_rally_s. The switch `energy_ok` reverts when endurance does not strictly exceed time-to-rally. Missing battery is not yet decoded from the flight controller, so the host publishes a large default until that message is wired. Acceptance tests in the switch cover the low and missing cases. Reason code `energy`.
 
 
