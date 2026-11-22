@@ -6,6 +6,10 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ### Added
 
+- M74–M82: deadline, heartbeat, grant, shadow, filter, and reload counters; memory budget, hot-path allocation, and stack bound notes.
+
+
+
 - M83–M91: file descriptor bound, socket reconnect, partial write, tracker backpressure, queue bound, drop policy, overload degrade, config schema version, unknown field policy.
 
 

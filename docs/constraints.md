@@ -61,3 +61,11 @@ Over deadline, the degrade row is Revert, not a quieter Pass.
 ## Config schema
 
 The TOML has a schema version. An unknown version refuses to start. Unknown keys error.
+
+## Counters
+
+Deadline miss, heartbeat miss, grant use, shadow takeover, filter intervention, and reload refusal are counters in the log or indication stream. An increase does not clear a Revert. The spec still owns the revert decision. Withdraw resets nothing; it only inhibits. shadow_takeover is not a health bit the spec trusts. Repeated filter intervention is a review item, not an automatic pass. A refused bundle keeps the old spec.
+
+## Memory and allocation
+
+A resident-set note for the host on the named board is written next to the power note. A growth across the 10-minute run is recorded, not explained away. The tick path documents where it allocates. A new allocation in decide is a review failure. decide stays allocation-free. The interpreter and the filter name their stack use as unknown until measured. Unknown is a gap row, not a zero.
