@@ -18,7 +18,7 @@ impl ModeSender {
         recovery: RecoveryMode,
         sink: &mut Vec<String>,
     ) -> SwitchCommand {
-        let command = decide(verdict, request, reported, recovery);
+        let command = decide(verdict, request, reported, recovery, false);
         if let SwitchCommand::Mode { recovery } = command {
             if !self.recovery_sent {
                 sink.push(format!("mode {recovery:?}"));

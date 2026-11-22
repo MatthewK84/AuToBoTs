@@ -21,6 +21,8 @@ pub struct TickCase {
     /// The evaluation worker has faulted: a missed deadline, a busy or dead worker, or an
     /// interpreter error.
     pub eval_fault: bool,
+    /// Pilot override: mode left offboard/guided or RC takeover. Suppresses setpoints.
+    pub pilot_override: bool,
 }
 
 #[derive(Debug)]
@@ -74,13 +76,14 @@ impl FailClosed {
             self.note("late verdict discarded");
         }
         if forced {
-            decide(Verdict::Revert, None, tick.reported, tick.recovery)
+            decide(Verdict::Revert, None, tick.reported, tick.recovery, tick.pilot_override)
         } else {
             decide(
                 tick.verdict.unwrap_or(Verdict::Revert),
                 tick.request,
                 tick.reported,
                 tick.recovery,
+                tick.pilot_override,
             )
         }
     }
@@ -132,6 +135,7 @@ mod tests {
             recovery,
             write_ok,
             eval_fault: false,
+            pilot_override: false,
         }
     }
 

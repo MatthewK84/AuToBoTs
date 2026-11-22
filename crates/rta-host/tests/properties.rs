@@ -291,7 +291,7 @@ proptest! {
         reported in recovery_mode(),
         recovery in recovery_mode(),
     ) {
-        let command = decide(verdict, request, reported, recovery);
+        let command = decide(verdict, request, reported, recovery, false);
         match (verdict, command) {
             (Verdict::Revert, SwitchCommand::Idle) => prop_assert_eq!(reported, recovery),
             (Verdict::Revert, SwitchCommand::Mode { recovery: sent }) => {

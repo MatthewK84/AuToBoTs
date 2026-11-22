@@ -24,3 +24,9 @@ H9 is unreachable: a command cannot be both setpoints and a mode change. The tab
 | H8 interpreter fault | Revert, latched |
 | H9 setpoints and mode change | Unreachable |
 | H10 log write failure | Revert, latched |
+
+## Pilot override (H16 / M140.1)
+
+A mode change off offboard/guided or an RC takeover suppresses setpoints and commit in the same tick (`SwitchCommand::Idle`). The latch holds Inhibit until the pilot returns the aircraft to the guided/offboard mode and a config flag permits resume. Revert still wins: recovery is commanded only if the pilot has released the sticks and a revert hazard is true.
+
+Reason code: `pilot_override`.

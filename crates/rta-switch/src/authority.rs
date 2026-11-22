@@ -99,7 +99,7 @@ pub fn decide_authorized(
     recovery: RecoveryMode,
     tick: &AuthorityTick<'_>,
 ) -> SwitchCommand {
-    let command = decide(verdict, request, reported_mode, recovery);
+    let command = decide(verdict, request, reported_mode, recovery, false);
     if authorize(tick) == CommitDecision::Commit {
         return command;
     }

@@ -139,6 +139,7 @@ fn main() -> ExitCode {
         recovery,
         write_ok: true,
         eval_fault: false,
+        pilot_override: false,
     });
     let line = TickRecord {
         tick: 1,

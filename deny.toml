@@ -3,6 +3,7 @@ yanked = "deny"
 ignore = [
   { id = "RUSTSEC-2026-0195", reason = "mavlink-bindgen 0.18 uses Reader, not NsReader. The advisory says a plain Reader is not affected. quick-xml 0.41 cannot be selected because mavlink-bindgen requires ^0.39." },
   { id = "RUSTSEC-2026-0194", reason = "Same blocked upgrade. The only consumer is the mavlink-bindgen build script, not the flight binary. Remove this ignore when mavlink-bindgen accepts quick-xml >= 0.41." },
+  { id = "RUSTSEC-2026-0542", reason = "humantime is unmaintained because it wraps the unmaintained chrono. Transitive via rtlola-interpreter 0.11.0. No safe upgrade available. Not used on the flight hot path. Remove when the interpreter drops humantime." },
 ]
 
 [licenses]

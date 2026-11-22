@@ -455,6 +455,12 @@ pub fn run<W: Write>(
         if latched {
             reasons.push(Reason::Latched);
         }
+        // Pilot override: main mode is not OFFBOARD (and we have heard a heartbeat).
+        // Stick, mode change off guided/offboard, or RC takeover. Revert still wins.
+        let pilot_override = vehicle.fc_custom_mode.map_or(false, |cm| {
+            let main = ((cm >> 16) & 0xFF) as u8;
+            main != crate::command_out::PX4_MAIN_MODE_OFFBOARD
+        });
         let command = closed.command(TickCase {
             verdict: if latched {
                 Some(Verdict::Revert)
@@ -468,6 +474,7 @@ pub fn run<W: Write>(
             recovery,
             write_ok: !log_failed,
             eval_fault: worker.faulted(),
+            pilot_override,
         });
         // The logged verdict is the one the switch acted on. Mode and Idle come only from
         // Revert; a forced Revert shows here even when the spec said Pass.

@@ -40,7 +40,7 @@ fn decide_variants_are_exclusive() {
     let request = any_request();
     let reported = any_mode();
     let recovery = any_mode();
-    let command = decide(verdict, request, reported, recovery);
+    let command = decide(verdict, request, reported, recovery, false);
     match command {
         SwitchCommand::Mode { recovery: mode } => {
             let _mode = mode;

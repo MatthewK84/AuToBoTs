@@ -60,7 +60,13 @@ pub fn decide(
     request: Option<Request>,
     reported_mode: rta_spec::RecoveryMode,
     recovery: rta_spec::RecoveryMode,
+    pilot_override: bool,
 ) -> SwitchCommand {
+    // Pilot override suppresses companion setpoints and commit in the same tick.
+    // Revert still wins: recovery is commanded only if the pilot has released.
+    if pilot_override && verdict != Verdict::Revert {
+        return SwitchCommand::Idle;
+    }
     match verdict {
         Verdict::Revert if reported_mode == recovery => SwitchCommand::Idle,
         Verdict::Revert => SwitchCommand::Mode { recovery },
@@ -191,6 +197,7 @@ mod tests {
             Some(request),
             rta_spec::RecoveryMode::Loiter,
             rta_spec::RecoveryMode::Rtl,
+            false,
         ) {
             SwitchCommand::Setpoints { commit: false, .. } => {}
             other => panic!("{other:?}"),
@@ -211,6 +218,7 @@ mod tests {
             Some(request),
             rta_spec::RecoveryMode::Rtl,
             rta_spec::RecoveryMode::Loiter,
+            false,
         ) {
             SwitchCommand::Setpoints { commit: false, .. } => {}
             other => panic!("{other:?}"),
@@ -230,6 +238,7 @@ mod tests {
             }),
             rta_spec::RecoveryMode::Rtl,
             rta_spec::RecoveryMode::Land,
+            false,
         ) {
             SwitchCommand::Mode {
                 recovery: rta_spec::RecoveryMode::Land,
@@ -252,27 +261,27 @@ mod tests {
         let same = rta_spec::RecoveryMode::Rtl;
         let other = rta_spec::RecoveryMode::Land;
         assert!(matches!(
-            decide(Verdict::Pass, Some(request), other, same),
+            decide(Verdict::Pass, Some(request), other, same, false),
             SwitchCommand::Setpoints { commit: true, .. }
         ));
         assert!(matches!(
-            decide(Verdict::Pass, None, other, same),
+            decide(Verdict::Pass, None, other, same, false),
             SwitchCommand::Setpoints { commit: false, .. }
         ));
         assert!(matches!(
-            decide(Verdict::Inhibit, Some(request), other, same),
+            decide(Verdict::Inhibit, Some(request), other, same, false),
             SwitchCommand::Setpoints { commit: false, .. }
         ));
         assert!(matches!(
-            decide(Verdict::Inhibit, None, other, same),
+            decide(Verdict::Inhibit, None, other, same, false),
             SwitchCommand::Setpoints { commit: false, .. }
         ));
         assert!(matches!(
-            decide(Verdict::Revert, Some(request), other, same),
+            decide(Verdict::Revert, Some(request), other, same, false),
             SwitchCommand::Mode { .. }
         ));
         assert!(matches!(
-            decide(Verdict::Revert, None, same, same),
+            decide(Verdict::Revert, None, same, same, false),
             SwitchCommand::Idle
         ));
     }
@@ -296,7 +305,7 @@ mod tests {
             "write_failure",
         ];
         for name in fail_closed {
-            let command = decide(Verdict::Revert, Some(request), other, recovery);
+            let command = decide(Verdict::Revert, Some(request), other, recovery, false);
             match command {
                 SwitchCommand::Mode { .. } | SwitchCommand::Idle => {}
                 SwitchCommand::Setpoints { north, .. } => {
@@ -315,7 +324,7 @@ mod tests {
             (Verdict::Revert, None, true),
         ];
         for (verdict, asked, recovery_only) in rows {
-            let command = decide(verdict, asked, other, recovery);
+            let command = decide(verdict, asked, other, recovery, false);
             assert_eq!(matches!(command, SwitchCommand::Mode { .. }), recovery_only);
             if let SwitchCommand::Setpoints { commit, north, .. } = command {
                 assert!(!recovery_only);
@@ -342,6 +351,7 @@ mod tests {
             }),
             rta_spec::RecoveryMode::Loiter,
             rta_spec::RecoveryMode::Rtl,
+            false,
         );
         match command {
             SwitchCommand::Setpoints { commit: false, .. } => {}
@@ -359,6 +369,7 @@ mod tests {
             request,
             rta_spec::RecoveryMode::Loiter,
             rta_spec::RecoveryMode::Rtl,
+            false,
         ) {
             SwitchCommand::Mode { .. } => {}
             SwitchCommand::Idle => panic!("stub request was treated as already recovered"),
@@ -385,7 +396,7 @@ mod tests {
             (Verdict::Pass, None, false),
         ];
         for (verdict, request, mode) in rows {
-            let command = decide(verdict, request, rta_spec::RecoveryMode::Loiter, recovery);
+            let command = decide(verdict, request, rta_spec::RecoveryMode::Loiter, recovery, false);
             assert_eq!(matches!(command, SwitchCommand::Mode { .. }), mode);
             if let SwitchCommand::Setpoints { commit, .. } = command {
                 assert!(!commit || verdict == Verdict::Pass);
@@ -396,6 +407,7 @@ mod tests {
             Some(pending),
             rta_spec::RecoveryMode::Loiter,
             recovery,
+            false,
         ) {
             SwitchCommand::Setpoints {
                 commit: true,
@@ -580,4 +592,42 @@ mod tests {
         assert_ne!(command, Command::Commit);
         assert_eq!(log.reason, Reason::Abort);
     }
+
+    #[test]
+    fn pilot_override_suppresses_setpoints_same_tick() {
+        let request = Request {
+            north: 1.0,
+            east: 0.0,
+            down: 0.0,
+            yaw: 0.0,
+            commit: true,
+        };
+        let command = decide(
+            Verdict::Pass,
+            Some(request),
+            rta_spec::RecoveryMode::Rtl,
+            rta_spec::RecoveryMode::Rtl,
+            true, // pilot override
+        );
+        assert!(matches!(command, SwitchCommand::Idle));
+    }
+
+    #[test]
+    fn revert_beats_pilot_override() {
+        let command = decide(
+            Verdict::Revert,
+            Some(Request {
+                north: 1.0,
+                east: 0.0,
+                down: 0.0,
+                yaw: 0.0,
+                commit: true,
+            }),
+            rta_spec::RecoveryMode::Loiter,
+            rta_spec::RecoveryMode::Rtl,
+            true, // pilot override, but Revert wins
+        );
+        assert!(matches!(command, SwitchCommand::Mode { recovery: rta_spec::RecoveryMode::Rtl }));
+    }
+
 }

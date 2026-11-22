@@ -4,6 +4,16 @@ All notable changes to this repository. The format follows [Keep a Changelog](ht
 
 ## [Unreleased]
 
+### Fixed
+
+- cargo-deny advisory RUSTSEC-2026-0542 (humantime unmaintained, transitive via rtlola-interpreter). Documented waiver with expiry condition in docs/waivers.md and deny.toml. No safe upgrade available.
+
+
+### Added
+
+- Pilot override (M140.1): host detects main mode != OFFBOARD and passes the flag to the switch. `decide` returns Idle (no setpoints) when override is true and the verdict is not Revert. Tests cover same-tick suppression and Revert-beats-override. Hazard H16 and verdicts note added.
+
+
 ### Added
 
 - Assumption log (`docs/assumptions.md`), constraint log (`docs/constraints.md`), open-item log (`docs/open-items.md`).

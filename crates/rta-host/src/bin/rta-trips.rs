@@ -133,7 +133,7 @@ fn main() -> ExitCode {
             yaw: 0.0,
             commit: true,
         };
-        let command = decide(verdict, Some(request), RecoveryMode::Loiter, recovery);
+        let command = decide(verdict, Some(request), RecoveryMode::Loiter, recovery, false);
         let committed = matches!(command, SwitchCommand::Setpoints { commit: true, .. });
         if committed != trip.commit {
             eprintln!("trips: {} commit flag", trip.name);
